@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.*;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.entity.Incident;
 import pl.telco.incident.service.IncidentService;
+import pl.telco.incident.dto.IncidentResponse;
 
 @RestController
 @RequestMapping("/api/incidents")
@@ -16,7 +17,7 @@ public class IncidentController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Incident createIncident(@RequestBody IncidentCreateRequest request) {
+    public IncidentResponse createIncident(@RequestBody IncidentCreateRequest request) {
         return incidentService.createIncident(request);
     }
 }
