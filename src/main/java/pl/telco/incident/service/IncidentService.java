@@ -66,7 +66,7 @@ public class IncidentService {
 
     @Transactional(readOnly = true)
     public List<IncidentResponse> getAllIncidents() {
-        return incidentRepository.findAll().stream()
+        return incidentRepository.findAllByOrderByOpenedAtDesc().stream()
                 .map(this::mapToResponse)
                 .toList();
     }
