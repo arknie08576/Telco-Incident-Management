@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import pl.telco.incident.dto.IncidentCreateRequest;
-import pl.telco.incident.entity.Incident;
 import pl.telco.incident.service.IncidentService;
 import pl.telco.incident.dto.IncidentResponse;
 

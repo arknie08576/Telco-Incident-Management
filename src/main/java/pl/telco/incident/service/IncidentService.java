@@ -4,12 +4,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentNodeRequest;
+import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.IncidentNode;
 import pl.telco.incident.entity.NetworkNode;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
-import pl.telco.incident.dto.IncidentResponse;
 
 @Service
 @RequiredArgsConstructor
@@ -20,10 +20,35 @@ public class IncidentService {
 
     public IncidentResponse createIncident(IncidentCreateRequest request) {
         Incident incident = new Incident();
-        // ... reszta jak była
+        incident.setIncidentNumber(request.getIncidentNumber());
+        incident.setTitle(request.getTitle());
+        incident.setPriority(request.getPriority());
+        incident.setRegion(request.getRegion());
+        incident.setSourceAlarmType(request.getSourceAlarmType());
+        incident.setPossiblyPlanned(request.getPossiblyPlanned());
+
+        if (request.getRootNodeId() != null) {
+            NetworkNode rootNode = networkNodeRepository.findById(request.getRootNodeId())
+                    .orElseThrow(() -> new RuntimeException("Root node not found: " + request.getRootNodeId()));
+            incident.setRootNode(rootNode);
+        }
+
+        if (request.getNodes() != null) {
+            for (IncidentNodeRequest nodeRequest : request.getNodes()) {
+                NetworkNode networkNode = networkNodeRepository.findById(nodeRequest.getNetworkNodeId())
+                        .orElseThrow(() -> new RuntimeException(
+                                "Network node not found: " + nodeRequest.getNetworkNodeId()
+                        ));
+
+                IncidentNode incidentNode = new IncidentNode();
+                incidentNode.setNetworkNode(networkNode);
+                incidentNode.setRole(nodeRequest.getRole());
+
+                incident.addIncidentNode(incidentNode);
+            }
+        }
 
         Incident saved = incidentRepository.save(incident);
-
         return mapToResponse(saved);
     }
 
