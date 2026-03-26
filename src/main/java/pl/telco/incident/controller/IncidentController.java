@@ -8,6 +8,8 @@ import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.service.IncidentService;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/incidents")
 @RequiredArgsConstructor
@@ -19,5 +21,10 @@ public class IncidentController {
     @ResponseStatus(HttpStatus.CREATED)
     public IncidentResponse createIncident(@Valid @RequestBody IncidentCreateRequest request) {
         return incidentService.createIncident(request);
+    }
+
+    @GetMapping
+    public List<IncidentResponse> getAllIncidents() {
+        return incidentService.getAllIncidents();
     }
 }

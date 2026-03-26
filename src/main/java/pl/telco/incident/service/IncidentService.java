@@ -17,6 +17,7 @@ import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Service
@@ -61,6 +62,13 @@ public class IncidentService {
 
         Incident saved = incidentRepository.save(incident);
         return mapToResponse(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public List<IncidentResponse> getAllIncidents() {
+        return incidentRepository.findAll().stream()
+                .map(this::mapToResponse)
+                .toList();
     }
 
     private void validateIncidentNumberUniqueness(String incidentNumber) {
