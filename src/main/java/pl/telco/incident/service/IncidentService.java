@@ -10,6 +10,7 @@ import pl.telco.incident.entity.IncidentNode;
 import pl.telco.incident.entity.NetworkNode;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
+import pl.telco.incident.exception.ResourceNotFoundException;
 
 @Service
 @RequiredArgsConstructor
@@ -29,14 +30,14 @@ public class IncidentService {
 
         if (request.getRootNodeId() != null) {
             NetworkNode rootNode = networkNodeRepository.findById(request.getRootNodeId())
-                    .orElseThrow(() -> new RuntimeException("Root node not found: " + request.getRootNodeId()));
+                    .orElseThrow(() -> new ResourceNotFoundException("Root node not found: " + request.getRootNodeId()));
             incident.setRootNode(rootNode);
         }
 
         if (request.getNodes() != null) {
             for (IncidentNodeRequest nodeRequest : request.getNodes()) {
                 NetworkNode networkNode = networkNodeRepository.findById(nodeRequest.getNetworkNodeId())
-                        .orElseThrow(() -> new RuntimeException(
+                        .orElseThrow(() -> new ResourceNotFoundException(
                                 "Network node not found: " + nodeRequest.getNetworkNodeId()
                         ));
 
