@@ -3,33 +3,23 @@ package pl.telco.incident.exception;
 import java.time.LocalDateTime;
 import java.util.Map;
 
-public class ApiErrorResponse {
+public class ValidationErrorResponse {
 
     private LocalDateTime timestamp;
     private int status;
     private String error;
     private String message;
-    private String path;
     private Map<String, String> fieldErrors;
 
-    public ApiErrorResponse() {
+    public ValidationErrorResponse() {
     }
 
-    public ApiErrorResponse(LocalDateTime timestamp, int status, String error, String message, String path) {
+    public ValidationErrorResponse(LocalDateTime timestamp, int status, String error,
+                                   String message, Map<String, String> fieldErrors) {
         this.timestamp = timestamp;
         this.status = status;
         this.error = error;
         this.message = message;
-        this.path = path;
-    }
-
-    public ApiErrorResponse(LocalDateTime timestamp, int status, String error, String message,
-                            String path, Map<String, String> fieldErrors) {
-        this.timestamp = timestamp;
-        this.status = status;
-        this.error = error;
-        this.message = message;
-        this.path = path;
         this.fieldErrors = fieldErrors;
     }
 
@@ -61,20 +51,12 @@ public class ApiErrorResponse {
         return message;
     }
 
-    public void setMessage(String message) {
-        this.message = message;
-    }
-
-    public String getPath() {
-        return path;
-    }
-
-    public void setPath(String path) {
-        this.path = path;
-    }
-
     public Map<String, String> getFieldErrors() {
         return fieldErrors;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
     }
 
     public void setFieldErrors(Map<String, String> fieldErrors) {
