@@ -2,15 +2,22 @@ package pl.telco.incident.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentNodeRequest;
 import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.IncidentNode;
 import pl.telco.incident.entity.NetworkNode;
+import pl.telco.incident.entity.enums.IncidentNodeRole;
+import pl.telco.incident.exception.BadRequestException;
+import pl.telco.incident.exception.ConflictException;
+import pl.telco.incident.exception.ResourceNotFoundException;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
-import pl.telco.incident.exception.ResourceNotFoundException;
+
+import java.util.HashSet;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -19,7 +26,17 @@ public class IncidentService {
     private final IncidentRepository incidentRepository;
     private final NetworkNodeRepository networkNodeRepository;
 
+    @Transactional
     public IncidentResponse createIncident(IncidentCreateRequest request) {
+        validateIncidentNumberUniqueness(request.getIncidentNumber());
+        validateNodeUniqueness(request);
+        validateRootNodeConsistency(request);
+
+        NetworkNode rootNode = networkNodeRepository.findById(request.getRootNodeId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Root node not found: " + request.getRootNodeId()
+                ));
+
         Incident incident = new Incident();
         incident.setIncidentNumber(request.getIncidentNumber());
         incident.setTitle(request.getTitle());
@@ -27,30 +44,61 @@ public class IncidentService {
         incident.setRegion(request.getRegion());
         incident.setSourceAlarmType(request.getSourceAlarmType());
         incident.setPossiblyPlanned(request.getPossiblyPlanned());
+        incident.setRootNode(rootNode);
 
-        if (request.getRootNodeId() != null) {
-            NetworkNode rootNode = networkNodeRepository.findById(request.getRootNodeId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Root node not found: " + request.getRootNodeId()));
-            incident.setRootNode(rootNode);
-        }
+        for (IncidentNodeRequest nodeRequest : request.getNodes()) {
+            NetworkNode networkNode = networkNodeRepository.findById(nodeRequest.getNetworkNodeId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Network node not found: " + nodeRequest.getNetworkNodeId()
+                    ));
 
-        if (request.getNodes() != null) {
-            for (IncidentNodeRequest nodeRequest : request.getNodes()) {
-                NetworkNode networkNode = networkNodeRepository.findById(nodeRequest.getNetworkNodeId())
-                        .orElseThrow(() -> new ResourceNotFoundException(
-                                "Network node not found: " + nodeRequest.getNetworkNodeId()
-                        ));
+            IncidentNode incidentNode = new IncidentNode();
+            incidentNode.setNetworkNode(networkNode);
+            incidentNode.setRole(nodeRequest.getRole());
 
-                IncidentNode incidentNode = new IncidentNode();
-                incidentNode.setNetworkNode(networkNode);
-                incidentNode.setRole(nodeRequest.getRole());
-
-                incident.addIncidentNode(incidentNode);
-            }
+            incident.addIncidentNode(incidentNode);
         }
 
         Incident saved = incidentRepository.save(incident);
         return mapToResponse(saved);
+    }
+
+    private void validateIncidentNumberUniqueness(String incidentNumber) {
+        if (incidentRepository.findByIncidentNumber(incidentNumber).isPresent()) {
+            throw new ConflictException("Incident with number already exists: " + incidentNumber);
+        }
+    }
+
+    private void validateNodeUniqueness(IncidentCreateRequest request) {
+        Set<Long> uniqueNodeIds = new HashSet<>();
+
+        for (IncidentNodeRequest nodeRequest : request.getNodes()) {
+            if (!uniqueNodeIds.add(nodeRequest.getNetworkNodeId())) {
+                throw new BadRequestException(
+                        "Duplicate networkNodeId in nodes: " + nodeRequest.getNetworkNodeId()
+                );
+            }
+        }
+    }
+
+    private void validateRootNodeConsistency(IncidentCreateRequest request) {
+        long rootCount = request.getNodes().stream()
+                .filter(node -> node.getRole() == IncidentNodeRole.ROOT)
+                .count();
+
+        if (rootCount != 1) {
+            throw new BadRequestException("Exactly one node must have role ROOT");
+        }
+
+        boolean rootMatches = request.getNodes().stream()
+                .anyMatch(node ->
+                        node.getRole() == IncidentNodeRole.ROOT
+                                && request.getRootNodeId().equals(node.getNetworkNodeId())
+                );
+
+        if (!rootMatches) {
+            throw new BadRequestException("rootNodeId must match the node with role ROOT");
+        }
     }
 
     private IncidentResponse mapToResponse(Incident incident) {
