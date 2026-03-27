@@ -23,6 +23,11 @@ public class IncidentController {
         return incidentService.createIncident(request);
     }
 
+    @GetMapping("/{id}")
+    public IncidentResponse getIncidentById(@PathVariable Long id) {
+        return incidentService.getIncidentById(id);
+    }
+
     @GetMapping
     public List<IncidentResponse> getAllIncidents() {
         return incidentService.getAllIncidents();

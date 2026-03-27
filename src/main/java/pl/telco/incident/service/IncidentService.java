@@ -71,6 +71,16 @@ public class IncidentService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public IncidentResponse getIncidentById(Long id) {
+        Incident incident = incidentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Incident not found: " + id
+                ));
+
+        return mapToResponse(incident);
+    }
+
     private void validateIncidentNumberUniqueness(String incidentNumber) {
         if (incidentRepository.findByIncidentNumber(incidentNumber).isPresent()) {
             throw new ConflictException("Incident with number already exists: " + incidentNumber);
