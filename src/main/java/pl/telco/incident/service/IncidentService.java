@@ -15,15 +15,16 @@ import pl.telco.incident.exception.ConflictException;
 import pl.telco.incident.exception.ResourceNotFoundException;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
-
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import java.util.Set;
+
 
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
+
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +32,13 @@ public class IncidentService {
 
     private final IncidentRepository incidentRepository;
     private final NetworkNodeRepository networkNodeRepository;
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+            "openedAt",
+            "incidentNumber",
+            "priority",
+            "title"
+    );
+
 
     @Transactional
     public IncidentResponse createIncident(IncidentCreateRequest request) {
@@ -70,11 +78,20 @@ public class IncidentService {
     }
 
     @Transactional(readOnly = true)
-    public Page<IncidentResponse> getAllIncidents(int page, int size) {
+    public Page<IncidentResponse> getAllIncidents(
+            int page,
+            int size,
+            String sortBy,
+            String direction
+    ) {
+        validateSortBy(sortBy);
+
+        Sort.Direction sortDirection = parseSortDirection(direction);
+
         Pageable pageable = PageRequest.of(
                 page,
                 size,
-                Sort.by(Sort.Direction.DESC, "openedAt")
+                Sort.by(sortDirection, sortBy)
         );
 
         return incidentRepository.findAll(pageable)
@@ -109,6 +126,20 @@ public class IncidentService {
                         "Duplicate networkNodeId in nodes: " + nodeRequest.getNetworkNodeId()
                 );
             }
+        }
+    }
+
+    private void validateSortBy(String sortBy) {
+        if (!ALLOWED_SORT_FIELDS.contains(sortBy)) {
+            throw new BadRequestException("Unsupported sortBy value: " + sortBy);
+        }
+    }
+
+    private Sort.Direction parseSortDirection(String direction) {
+        try {
+            return Sort.Direction.fromString(direction);
+        } catch (IllegalArgumentException ex) {
+            throw new BadRequestException("Unsupported direction value: " + direction);
         }
     }
 
