@@ -16,6 +16,11 @@ import pl.telco.incident.exception.ResourceNotFoundException;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -65,11 +70,18 @@ public class IncidentService {
     }
 
     @Transactional(readOnly = true)
-    public List<IncidentResponse> getAllIncidents() {
-        return incidentRepository.findAllByOrderByOpenedAtDesc().stream()
-                .map(this::mapToResponse)
-                .toList();
+    public Page<IncidentResponse> getAllIncidents(int page, int size) {
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, "openedAt")
+        );
+
+        return incidentRepository.findAll(pageable)
+                .map(this::mapToResponse);
     }
+
+
 
     @Transactional(readOnly = true)
     public IncidentResponse getIncidentById(Long id) {
@@ -80,6 +92,7 @@ public class IncidentService {
 
         return mapToResponse(incident);
     }
+
 
     private void validateIncidentNumberUniqueness(String incidentNumber) {
         if (incidentRepository.findByIncidentNumber(incidentNumber).isPresent()) {
