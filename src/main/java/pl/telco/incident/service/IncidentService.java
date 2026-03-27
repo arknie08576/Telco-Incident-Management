@@ -1,6 +1,11 @@
 package pl.telco.incident.service;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.IncidentCreateRequest;
@@ -10,21 +15,19 @@ import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.IncidentNode;
 import pl.telco.incident.entity.NetworkNode;
 import pl.telco.incident.entity.enums.IncidentNodeRole;
+import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.exception.BadRequestException;
 import pl.telco.incident.exception.ConflictException;
 import pl.telco.incident.exception.ResourceNotFoundException;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import java.util.Set;
-
 
 import java.util.HashSet;
-import java.util.List;
+import java.util.Set;
 
+import static pl.telco.incident.repository.specification.IncidentSpecifications.hasPossiblyPlanned;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.hasPriority;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.hasRegion;
 
 @Service
 @RequiredArgsConstructor
@@ -32,13 +35,13 @@ public class IncidentService {
 
     private final IncidentRepository incidentRepository;
     private final NetworkNodeRepository networkNodeRepository;
+
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "openedAt",
             "incidentNumber",
             "priority",
             "title"
     );
-
 
     @Transactional
     public IncidentResponse createIncident(IncidentCreateRequest request) {
@@ -82,7 +85,10 @@ public class IncidentService {
             int page,
             int size,
             String sortBy,
-            String direction
+            String direction,
+            IncidentPriority priority,
+            String region,
+            Boolean possiblyPlanned
     ) {
         validateSortBy(sortBy);
 
@@ -94,11 +100,14 @@ public class IncidentService {
                 Sort.by(sortDirection, sortBy)
         );
 
-        return incidentRepository.findAll(pageable)
+        Specification<Incident> specification = Specification
+                .where(hasPriority(priority))
+                .and(hasRegion(region))
+                .and(hasPossiblyPlanned(possiblyPlanned));
+
+        return incidentRepository.findAll(specification, pageable)
                 .map(this::mapToResponse);
     }
-
-
 
     @Transactional(readOnly = true)
     public IncidentResponse getIncidentById(Long id) {
@@ -109,7 +118,6 @@ public class IncidentService {
 
         return mapToResponse(incident);
     }
-
 
     private void validateIncidentNumberUniqueness(String incidentNumber) {
         if (incidentRepository.findByIncidentNumber(incidentNumber).isPresent()) {

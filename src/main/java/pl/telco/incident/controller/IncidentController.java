@@ -1,18 +1,17 @@
 package pl.telco.incident.controller;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentResponse;
+import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.service.IncidentService;
-
-import java.util.List;
-import org.springframework.data.domain.Page;
-import org.springframework.validation.annotation.Validated;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 
 @Validated
 @RestController
@@ -38,8 +37,19 @@ public class IncidentController {
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "openedAt") String sortBy,
-            @RequestParam(defaultValue = "desc") String direction
+            @RequestParam(defaultValue = "desc") String direction,
+            @RequestParam(required = false) IncidentPriority priority,
+            @RequestParam(required = false) String region,
+            @RequestParam(required = false) Boolean possiblyPlanned
     ) {
-        return incidentService.getAllIncidents(page, size, sortBy, direction);
+        return incidentService.getAllIncidents(
+                page,
+                size,
+                sortBy,
+                direction,
+                priority,
+                region,
+                possiblyPlanned
+        );
     }
 }
