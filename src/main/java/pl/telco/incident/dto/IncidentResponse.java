@@ -14,6 +14,8 @@ public class IncidentResponse {
     private IncidentPriority priority;
     private String region;
     private LocalDateTime openedAt;
+    private LocalDateTime acknowledgedAt;
+    private LocalDateTime resolvedAt;
 
     public Long getId() {
         return id;
@@ -69,5 +71,21 @@ public class IncidentResponse {
 
     public void setOpenedAt(LocalDateTime openedAt) {
         this.openedAt = openedAt;
+    }
+
+    public LocalDateTime getAcknowledgedAt() {
+        return acknowledgedAt;
+    }
+
+    public void setAcknowledgedAt(LocalDateTime acknowledgedAt) {
+        this.acknowledgedAt = acknowledgedAt;
+    }
+
+    public LocalDateTime getResolvedAt() {
+        return resolvedAt;
+    }
+
+    public void setResolvedAt(LocalDateTime resolvedAt) {
+        this.resolvedAt = resolvedAt;
     }
 }

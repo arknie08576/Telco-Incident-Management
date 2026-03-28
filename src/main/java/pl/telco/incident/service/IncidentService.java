@@ -23,6 +23,7 @@ import pl.telco.incident.exception.ResourceNotFoundException;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -115,12 +116,75 @@ public class IncidentService {
 
     @Transactional(readOnly = true)
     public IncidentResponse getIncidentById(Long id) {
-        Incident incident = incidentRepository.findById(id)
+        Incident incident = findIncidentByIdOrThrow(id);
+        return mapToResponse(incident);
+    }
+
+    @Transactional
+    public IncidentResponse acknowledgeIncident(Long id) {
+        Incident incident = findIncidentByIdOrThrow(id);
+
+        validateStatusTransition(
+                incident,
+                IncidentStatus.OPEN,
+                "Only OPEN incidents can be acknowledged"
+        );
+
+        incident.setStatus(IncidentStatus.ACKNOWLEDGED);
+        incident.setAcknowledgedAt(LocalDateTime.now());
+
+        Incident saved = incidentRepository.save(incident);
+        return mapToResponse(saved);
+    }
+
+    @Transactional
+    public IncidentResponse resolveIncident(Long id) {
+        Incident incident = findIncidentByIdOrThrow(id);
+
+        validateStatusTransition(
+                incident,
+                IncidentStatus.ACKNOWLEDGED,
+                "Only ACKNOWLEDGED incidents can be resolved"
+        );
+
+        incident.setStatus(IncidentStatus.RESOLVED);
+        incident.setResolvedAt(LocalDateTime.now());
+
+        Incident saved = incidentRepository.save(incident);
+        return mapToResponse(saved);
+    }
+
+    @Transactional
+    public IncidentResponse closeIncident(Long id) {
+        Incident incident = findIncidentByIdOrThrow(id);
+
+        validateStatusTransition(
+                incident,
+                IncidentStatus.RESOLVED,
+                "Only RESOLVED incidents can be closed"
+        );
+
+        incident.setStatus(IncidentStatus.CLOSED);
+
+        Incident saved = incidentRepository.save(incident);
+        return mapToResponse(saved);
+    }
+
+    private Incident findIncidentByIdOrThrow(Long id) {
+        return incidentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Incident not found: " + id
                 ));
+    }
 
-        return mapToResponse(incident);
+    private void validateStatusTransition(
+            Incident incident,
+            IncidentStatus expectedCurrentStatus,
+            String errorMessage
+    ) {
+        if (incident.getStatus() != expectedCurrentStatus) {
+            throw new BadRequestException(errorMessage);
+        }
     }
 
     private void validateIncidentNumberUniqueness(String incidentNumber) {
@@ -184,6 +248,8 @@ public class IncidentService {
         response.setPriority(incident.getPriority());
         response.setRegion(incident.getRegion());
         response.setOpenedAt(incident.getOpenedAt());
+        response.setAcknowledgedAt(incident.getAcknowledgedAt());
+        response.setResolvedAt(incident.getResolvedAt());
         return response;
     }
 }

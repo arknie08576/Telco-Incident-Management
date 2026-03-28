@@ -29,7 +29,7 @@ public class IncidentController {
     }
 
     @GetMapping("/{id}")
-    public IncidentResponse getIncidentById(@PathVariable Long id) {
+    public IncidentResponse getIncidentById(@PathVariable("id") Long id) {
         return incidentService.getIncidentById(id);
     }
 
@@ -54,5 +54,20 @@ public class IncidentController {
                 possiblyPlanned,
                 status
         );
+    }
+
+    @PatchMapping("/{id}/acknowledge")
+    public IncidentResponse acknowledgeIncident(@PathVariable("id") Long id) {
+        return incidentService.acknowledgeIncident(id);
+    }
+
+    @PatchMapping("/{id}/resolve")
+    public IncidentResponse resolveIncident(@PathVariable("id") Long id) {
+        return incidentService.resolveIncident(id);
+    }
+
+    @PatchMapping("/{id}/close")
+    public IncidentResponse closeIncident(@PathVariable("id") Long id) {
+        return incidentService.closeIncident(id);
     }
 }
