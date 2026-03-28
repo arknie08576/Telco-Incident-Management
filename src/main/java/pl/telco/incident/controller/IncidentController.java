@@ -10,9 +10,12 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentResponse;
+import pl.telco.incident.dto.IncidentTimelineResponse;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.service.IncidentService;
+
+import java.util.List;
 
 @Validated
 @RestController
@@ -69,5 +72,10 @@ public class IncidentController {
     @PatchMapping("/{id}/close")
     public IncidentResponse closeIncident(@PathVariable("id") Long id) {
         return incidentService.closeIncident(id);
+    }
+
+    @GetMapping("/{id}/timeline")
+    public List<IncidentTimelineResponse> getIncidentTimeline(@PathVariable("id") Long id) {
+        return incidentService.getIncidentTimeline(id);
     }
 }

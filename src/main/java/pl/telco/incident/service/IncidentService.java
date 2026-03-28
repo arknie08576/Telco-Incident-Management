@@ -11,8 +11,10 @@ import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentNodeRequest;
 import pl.telco.incident.dto.IncidentResponse;
+import pl.telco.incident.dto.IncidentTimelineResponse;
 import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.IncidentNode;
+import pl.telco.incident.entity.IncidentTimeline;
 import pl.telco.incident.entity.NetworkNode;
 import pl.telco.incident.entity.enums.IncidentNodeRole;
 import pl.telco.incident.entity.enums.IncidentPriority;
@@ -21,10 +23,12 @@ import pl.telco.incident.exception.BadRequestException;
 import pl.telco.incident.exception.ConflictException;
 import pl.telco.incident.exception.ResourceNotFoundException;
 import pl.telco.incident.repository.IncidentRepository;
+import pl.telco.incident.repository.IncidentTimelineRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasPossiblyPlanned;
@@ -38,6 +42,7 @@ public class IncidentService {
 
     private final IncidentRepository incidentRepository;
     private final NetworkNodeRepository networkNodeRepository;
+    private final IncidentTimelineRepository incidentTimelineRepository;
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "openedAt",
@@ -80,6 +85,13 @@ public class IncidentService {
         }
 
         Incident saved = incidentRepository.save(incident);
+
+        addTimelineEvent(
+                saved,
+                "CREATED",
+                "Incident created"
+        );
+
         return mapToResponse(saved);
     }
 
@@ -120,6 +132,15 @@ public class IncidentService {
         return mapToResponse(incident);
     }
 
+    @Transactional(readOnly = true)
+    public List<IncidentTimelineResponse> getIncidentTimeline(Long id) {
+        findIncidentByIdOrThrow(id);
+
+        return incidentTimelineRepository.findByIncidentIdOrderByCreatedAtAsc(id).stream()
+                .map(this::mapTimelineToResponse)
+                .toList();
+    }
+
     @Transactional
     public IncidentResponse acknowledgeIncident(Long id) {
         Incident incident = findIncidentByIdOrThrow(id);
@@ -134,6 +155,13 @@ public class IncidentService {
         incident.setAcknowledgedAt(LocalDateTime.now());
 
         Incident saved = incidentRepository.save(incident);
+
+        addTimelineEvent(
+                saved,
+                "ACKNOWLEDGED",
+                "Incident acknowledged"
+        );
+
         return mapToResponse(saved);
     }
 
@@ -151,6 +179,13 @@ public class IncidentService {
         incident.setResolvedAt(LocalDateTime.now());
 
         Incident saved = incidentRepository.save(incident);
+
+        addTimelineEvent(
+                saved,
+                "RESOLVED",
+                "Incident resolved"
+        );
+
         return mapToResponse(saved);
     }
 
@@ -165,8 +200,16 @@ public class IncidentService {
         );
 
         incident.setStatus(IncidentStatus.CLOSED);
+        incident.setClosedAt(LocalDateTime.now());
 
         Incident saved = incidentRepository.save(incident);
+
+        addTimelineEvent(
+                saved,
+                "CLOSED",
+                "Incident closed"
+        );
+
         return mapToResponse(saved);
     }
 
@@ -185,6 +228,15 @@ public class IncidentService {
         if (incident.getStatus() != expectedCurrentStatus) {
             throw new BadRequestException(errorMessage);
         }
+    }
+
+    private void addTimelineEvent(Incident incident, String eventType, String message) {
+        IncidentTimeline timeline = new IncidentTimeline();
+        timeline.setIncident(incident);
+        timeline.setEventType(eventType);
+        timeline.setMessage(message);
+
+        incidentTimelineRepository.save(timeline);
     }
 
     private void validateIncidentNumberUniqueness(String incidentNumber) {
@@ -250,6 +302,16 @@ public class IncidentService {
         response.setOpenedAt(incident.getOpenedAt());
         response.setAcknowledgedAt(incident.getAcknowledgedAt());
         response.setResolvedAt(incident.getResolvedAt());
+        response.setClosedAt(incident.getClosedAt());
+        return response;
+    }
+
+    private IncidentTimelineResponse mapTimelineToResponse(IncidentTimeline timeline) {
+        IncidentTimelineResponse response = new IncidentTimelineResponse();
+        response.setId(timeline.getId());
+        response.setEventType(timeline.getEventType());
+        response.setMessage(timeline.getMessage());
+        response.setCreatedAt(timeline.getCreatedAt());
         return response;
     }
 }

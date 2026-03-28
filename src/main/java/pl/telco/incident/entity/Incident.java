@@ -52,6 +52,9 @@ public class Incident {
     @Column(name = "resolved_at")
     private LocalDateTime resolvedAt;
 
+    @Column(name = "closed_at")
+    private LocalDateTime closedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -67,7 +70,8 @@ public class Incident {
     public Incident(Long id, String incidentNumber, NetworkNode rootNode, String title, IncidentStatus status,
                     IncidentPriority priority, String sourceAlarmType, String region, Boolean possiblyPlanned,
                     LocalDateTime openedAt, LocalDateTime acknowledgedAt, LocalDateTime resolvedAt,
-                    LocalDateTime createdAt, LocalDateTime updatedAt, List<IncidentNode> incidentNodes) {
+                    LocalDateTime closedAt, LocalDateTime createdAt, LocalDateTime updatedAt,
+                    List<IncidentNode> incidentNodes) {
         this.id = id;
         this.incidentNumber = incidentNumber;
         this.rootNode = rootNode;
@@ -80,6 +84,7 @@ public class Incident {
         this.openedAt = openedAt;
         this.acknowledgedAt = acknowledgedAt;
         this.resolvedAt = resolvedAt;
+        this.closedAt = closedAt;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
         this.incidentNodes = incidentNodes != null ? incidentNodes : new ArrayList<>();
@@ -216,6 +221,14 @@ public class Incident {
         this.resolvedAt = resolvedAt;
     }
 
+    public LocalDateTime getClosedAt() {
+        return closedAt;
+    }
+
+    public void setClosedAt(LocalDateTime closedAt) {
+        this.closedAt = closedAt;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -253,6 +266,7 @@ public class Incident {
         private LocalDateTime openedAt;
         private LocalDateTime acknowledgedAt;
         private LocalDateTime resolvedAt;
+        private LocalDateTime closedAt;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
         private List<IncidentNode> incidentNodes = new ArrayList<>();
@@ -320,6 +334,11 @@ public class Incident {
             return this;
         }
 
+        public IncidentBuilder closedAt(LocalDateTime closedAt) {
+            this.closedAt = closedAt;
+            return this;
+        }
+
         public IncidentBuilder createdAt(LocalDateTime createdAt) {
             this.createdAt = createdAt;
             return this;
@@ -337,7 +356,7 @@ public class Incident {
 
         public Incident build() {
             return new Incident(id, incidentNumber, rootNode, title, status, priority, sourceAlarmType, region,
-                    possiblyPlanned, openedAt, acknowledgedAt, resolvedAt, createdAt, updatedAt, incidentNodes);
+                    possiblyPlanned, openedAt, acknowledgedAt, resolvedAt, closedAt, createdAt, updatedAt, incidentNodes);
         }
     }
 }

@@ -16,6 +16,7 @@ public class IncidentResponse {
     private LocalDateTime openedAt;
     private LocalDateTime acknowledgedAt;
     private LocalDateTime resolvedAt;
+    private LocalDateTime closedAt;
 
     public Long getId() {
         return id;
@@ -87,5 +88,13 @@ public class IncidentResponse {
 
     public void setResolvedAt(LocalDateTime resolvedAt) {
         this.resolvedAt = resolvedAt;
+    }
+
+    public LocalDateTime getClosedAt() {
+        return closedAt;
+    }
+
+    public void setClosedAt(LocalDateTime closedAt) {
+        this.closedAt = closedAt;
     }
 }
