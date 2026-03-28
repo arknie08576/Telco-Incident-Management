@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.entity.enums.IncidentPriority;
+import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.service.IncidentService;
 
 @Validated
@@ -34,13 +35,14 @@ public class IncidentController {
 
     @GetMapping
     public Page<IncidentResponse> getAllIncidents(
-            @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
-            @RequestParam(defaultValue = "openedAt") String sortBy,
-            @RequestParam(defaultValue = "desc") String direction,
-            @RequestParam(required = false) IncidentPriority priority,
-            @RequestParam(required = false) String region,
-            @RequestParam(required = false) Boolean possiblyPlanned
+            @RequestParam(name = "page", defaultValue = "0") @Min(0) int page,
+            @RequestParam(name = "size", defaultValue = "10") @Min(1) @Max(100) int size,
+            @RequestParam(name = "sortBy", defaultValue = "openedAt") String sortBy,
+            @RequestParam(name = "direction", defaultValue = "desc") String direction,
+            @RequestParam(name = "priority", required = false) IncidentPriority priority,
+            @RequestParam(name = "region", required = false) String region,
+            @RequestParam(name = "possiblyPlanned", required = false) Boolean possiblyPlanned,
+            @RequestParam(name = "status", required = false) IncidentStatus status
     ) {
         return incidentService.getAllIncidents(
                 page,
@@ -49,7 +51,8 @@ public class IncidentController {
                 direction,
                 priority,
                 region,
-                possiblyPlanned
+                possiblyPlanned,
+                status
         );
     }
 }

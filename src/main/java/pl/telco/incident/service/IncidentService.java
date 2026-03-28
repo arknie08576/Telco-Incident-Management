@@ -16,6 +16,7 @@ import pl.telco.incident.entity.IncidentNode;
 import pl.telco.incident.entity.NetworkNode;
 import pl.telco.incident.entity.enums.IncidentNodeRole;
 import pl.telco.incident.entity.enums.IncidentPriority;
+import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.exception.BadRequestException;
 import pl.telco.incident.exception.ConflictException;
 import pl.telco.incident.exception.ResourceNotFoundException;
@@ -28,6 +29,7 @@ import java.util.Set;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasPossiblyPlanned;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasPriority;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasRegion;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.hasStatus;
 
 @Service
 @RequiredArgsConstructor
@@ -88,7 +90,8 @@ public class IncidentService {
             String direction,
             IncidentPriority priority,
             String region,
-            Boolean possiblyPlanned
+            Boolean possiblyPlanned,
+            IncidentStatus status
     ) {
         validateSortBy(sortBy);
 
@@ -103,7 +106,8 @@ public class IncidentService {
         Specification<Incident> specification = Specification
                 .where(hasPriority(priority))
                 .and(hasRegion(region))
-                .and(hasPossiblyPlanned(possiblyPlanned));
+                .and(hasPossiblyPlanned(possiblyPlanned))
+                .and(hasStatus(status));
 
         return incidentRepository.findAll(specification, pageable)
                 .map(this::mapToResponse);
