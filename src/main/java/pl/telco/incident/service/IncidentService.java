@@ -36,6 +36,8 @@ import static pl.telco.incident.repository.specification.IncidentSpecifications.
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasPriority;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasRegion;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasStatus;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.openedAtFrom;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.openedAtTo;
 
 @Service
 @RequiredArgsConstructor
@@ -105,9 +107,12 @@ public class IncidentService {
             IncidentPriority priority,
             String region,
             Boolean possiblyPlanned,
-            IncidentStatus status
+            IncidentStatus status,
+            LocalDateTime openedFrom,
+            LocalDateTime openedTo
     ) {
         validateSortBy(sortBy);
+        validateOpenedAtRange(openedFrom, openedTo);
 
         Sort.Direction sortDirection = parseSortDirection(direction);
 
@@ -121,7 +126,9 @@ public class IncidentService {
                 .where(hasPriority(priority))
                 .and(hasRegion(region))
                 .and(hasPossiblyPlanned(possiblyPlanned))
-                .and(hasStatus(status));
+                .and(hasStatus(status))
+                .and(openedAtFrom(openedFrom))
+                .and(openedAtTo(openedTo));
 
         return incidentRepository.findAll(specification, pageable)
                 .map(this::mapToResponse);
@@ -297,6 +304,12 @@ public class IncidentService {
 
         if (!rootMatches) {
             throw new BadRequestException("rootNodeId must match the node with role ROOT");
+        }
+    }
+
+    private void validateOpenedAtRange(LocalDateTime openedFrom, LocalDateTime openedTo) {
+        if (openedFrom != null && openedTo != null && openedFrom.isAfter(openedTo)) {
+            throw new BadRequestException("openedFrom must be earlier than or equal to openedTo");
         }
     }
 

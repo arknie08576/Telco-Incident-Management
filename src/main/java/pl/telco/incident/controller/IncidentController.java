@@ -14,6 +14,7 @@ import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import pl.telco.incident.dto.IncidentActionRequest;
@@ -25,6 +26,7 @@ import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.service.IncidentService;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Validated
@@ -114,7 +116,13 @@ public class IncidentController {
             @Parameter(description = "Filter incidents that may be planned work", example = "false")
             @RequestParam(name = "possiblyPlanned", required = false) Boolean possiblyPlanned,
             @Parameter(description = "Filter by lifecycle status", example = "OPEN")
-            @RequestParam(name = "status", required = false) IncidentStatus status
+            @RequestParam(name = "status", required = false) IncidentStatus status,
+            @Parameter(description = "Include incidents opened at or after this timestamp.", example = "2026-03-29T07:00:00")
+            @RequestParam(name = "openedFrom", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime openedFrom,
+            @Parameter(description = "Include incidents opened at or before this timestamp.", example = "2026-03-29T12:00:00")
+            @RequestParam(name = "openedTo", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime openedTo
     ) {
         Page<IncidentResponse> incidentPage = incidentService.getAllIncidents(
                 page,
@@ -124,7 +132,9 @@ public class IncidentController {
                 priority,
                 region,
                 possiblyPlanned,
-                status
+                status,
+                openedFrom,
+                openedTo
         );
 
         return IncidentPageResponse.from(incidentPage);

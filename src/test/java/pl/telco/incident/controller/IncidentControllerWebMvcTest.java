@@ -118,6 +118,14 @@ class IncidentControllerWebMvcTest {
     }
 
     @Test
+    void getAllIncidentsShouldReturnBadRequestForInvalidOpenedFromFormat() throws Exception {
+        mockMvc.perform(get("/api/incidents")
+                        .param("openedFrom", "2026-03-29"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value '2026-03-29' for parameter 'openedFrom'"));
+    }
+
+    @Test
     void getIncidentByIdShouldMapResourceNotFoundException() throws Exception {
         incidentService.setGetIncidentByIdHandler(id -> {
             throw new ResourceNotFoundException("Incident not found: " + id);
@@ -249,7 +257,9 @@ class IncidentControllerWebMvcTest {
                 IncidentPriority priority,
                 String region,
                 Boolean possiblyPlanned,
-                IncidentStatus status
+                IncidentStatus status,
+                LocalDateTime openedFrom,
+                LocalDateTime openedTo
         ) {
             return new PageImpl<>(List.of());
         }

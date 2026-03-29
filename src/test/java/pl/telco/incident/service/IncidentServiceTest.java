@@ -223,9 +223,28 @@ class IncidentServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
                 null
         )).isInstanceOf(BadRequestException.class)
                 .hasMessage("Unsupported sortBy value: createdAt");
+    }
+
+    @Test
+    void getAllIncidentsShouldRejectOpenedAtRangeWhenFromIsAfterTo() {
+        assertThatThrownBy(() -> incidentService.getAllIncidents(
+                0,
+                10,
+                "openedAt",
+                "desc",
+                null,
+                null,
+                null,
+                null,
+                LocalDateTime.of(2026, 3, 30, 10, 0),
+                LocalDateTime.of(2026, 3, 29, 10, 0)
+        )).isInstanceOf(BadRequestException.class)
+                .hasMessage("openedFrom must be earlier than or equal to openedTo");
     }
 
     @Test
@@ -248,7 +267,9 @@ class IncidentServiceTest {
                 IncidentPriority.CRITICAL,
                 "pomorskie",
                 false,
-                IncidentStatus.OPEN
+                IncidentStatus.OPEN,
+                LocalDateTime.of(2026, 3, 29, 0, 0),
+                LocalDateTime.of(2026, 3, 29, 23, 59)
         );
 
         assertThat(result.getContent()).hasSize(1);

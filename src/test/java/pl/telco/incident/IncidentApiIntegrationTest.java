@@ -404,6 +404,30 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void getAllIncidentsShouldFilterByOpenedAtRange() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-WAW-02", NodeType.ROUTER, "MAZOWIECKIE");
+
+        saveIncident("INC-601", "Before range", IncidentStatus.OPEN, IncidentPriority.HIGH, "MAZOWIECKIE",
+                rootNode, LocalDateTime.of(2026, 3, 29, 7, 0));
+        saveIncident("INC-602", "Inside range first", IncidentStatus.OPEN, IncidentPriority.HIGH, "MAZOWIECKIE",
+                rootNode, LocalDateTime.of(2026, 3, 29, 9, 0));
+        saveIncident("INC-603", "Inside range second", IncidentStatus.OPEN, IncidentPriority.HIGH, "MAZOWIECKIE",
+                rootNode, LocalDateTime.of(2026, 3, 29, 11, 0));
+        saveIncident("INC-604", "After range", IncidentStatus.OPEN, IncidentPriority.HIGH, "MAZOWIECKIE",
+                rootNode, LocalDateTime.of(2026, 3, 29, 13, 0));
+
+        mockMvc.perform(get("/api/incidents")
+                        .param("openedFrom", "2026-03-29T08:00:00")
+                        .param("openedTo", "2026-03-29T12:00:00")
+                        .param("sortBy", "openedAt")
+                        .param("direction", "asc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].incidentNumber").value("INC-602"))
+                .andExpect(jsonPath("$.content[1].incidentNumber").value("INC-603"));
+    }
+
+    @Test
     void getAllIncidentsShouldReturnBadRequestForUnsupportedSortBy() throws Exception {
         mockMvc.perform(get("/api/incidents")
                         .param("sortBy", "createdAt"))
@@ -443,6 +467,15 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
                         .param("priority", "URGENT"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Invalid value 'URGENT' for parameter 'priority'"));
+    }
+
+    @Test
+    void getAllIncidentsShouldReturnBadRequestWhenOpenedFromIsAfterOpenedTo() throws Exception {
+        mockMvc.perform(get("/api/incidents")
+                        .param("openedFrom", "2026-03-29T12:00:00")
+                        .param("openedTo", "2026-03-29T08:00:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("openedFrom must be earlier than or equal to openedTo"));
     }
 
     private Long createIncidentThroughApi(NetworkNode rootNode, NetworkNode affectedNode, String incidentNumber) throws Exception {
@@ -498,6 +531,18 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
             String region,
             NetworkNode rootNode
     ) {
+        return saveIncident(incidentNumber, title, status, priority, region, rootNode, LocalDateTime.now().minusHours(2));
+    }
+
+    private Incident saveIncident(
+            String incidentNumber,
+            String title,
+            IncidentStatus status,
+            IncidentPriority priority,
+            String region,
+            NetworkNode rootNode,
+            LocalDateTime openedAt
+    ) {
         Incident incident = Incident.builder()
                 .incidentNumber(incidentNumber)
                 .title(title)
@@ -507,15 +552,15 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
                 .sourceAlarmType("TEST")
                 .possiblyPlanned(false)
                 .rootNode(rootNode)
-                .openedAt(LocalDateTime.now().minusHours(2))
+                .openedAt(openedAt)
                 .acknowledgedAt(status == IncidentStatus.ACKNOWLEDGED || status == IncidentStatus.RESOLVED || status == IncidentStatus.CLOSED
-                        ? LocalDateTime.now().minusHours(1)
+                        ? openedAt.plusHours(1)
                         : null)
                 .resolvedAt(status == IncidentStatus.RESOLVED || status == IncidentStatus.CLOSED
-                        ? LocalDateTime.now().minusMinutes(30)
+                        ? openedAt.plusHours(2)
                         : null)
                 .closedAt(status == IncidentStatus.CLOSED
-                        ? LocalDateTime.now().minusMinutes(10)
+                        ? openedAt.plusHours(3)
                         : null)
                 .build();
 

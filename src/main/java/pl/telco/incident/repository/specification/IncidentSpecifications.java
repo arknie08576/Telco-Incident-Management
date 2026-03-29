@@ -5,6 +5,8 @@ import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
 
+import java.time.LocalDateTime;
+
 public final class IncidentSpecifications {
 
     private IncidentSpecifications() {
@@ -30,5 +32,15 @@ public final class IncidentSpecifications {
     public static Specification<Incident> hasStatus(IncidentStatus status) {
         return (root, query, cb) ->
                 status == null ? null : cb.equal(root.get("status"), status);
+    }
+
+    public static Specification<Incident> openedAtFrom(LocalDateTime openedFrom) {
+        return (root, query, cb) ->
+                openedFrom == null ? null : cb.greaterThanOrEqualTo(root.get("openedAt"), openedFrom);
+    }
+
+    public static Specification<Incident> openedAtTo(LocalDateTime openedTo) {
+        return (root, query, cb) ->
+                openedTo == null ? null : cb.lessThanOrEqualTo(root.get("openedAt"), openedTo);
     }
 }
