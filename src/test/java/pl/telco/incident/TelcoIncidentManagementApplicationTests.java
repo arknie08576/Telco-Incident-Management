@@ -1,10 +1,8 @@
 package pl.telco.incident;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
-class TelcoIncidentManagementApplicationTests {
+class TelcoIncidentManagementApplicationTests extends AbstractPostgresIntegrationTest {
 
     @Test
     void contextLoads() {

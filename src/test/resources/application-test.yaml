@@ -1,0 +1,7 @@
+app:
+  seed:
+    enabled: false
+
+spring:
+  jpa:
+    show-sql: false
