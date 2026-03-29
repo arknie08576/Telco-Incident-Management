@@ -8,6 +8,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pl.telco.incident.dto.IncidentActionRequest;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentNodeRequest;
 import pl.telco.incident.dto.IncidentResponse;
@@ -142,7 +143,7 @@ public class IncidentService {
     }
 
     @Transactional
-    public IncidentResponse acknowledgeIncident(Long id) {
+    public IncidentResponse acknowledgeIncident(Long id, IncidentActionRequest request) {
         Incident incident = findIncidentByIdOrThrow(id);
 
         validateStatusTransition(
@@ -159,14 +160,14 @@ public class IncidentService {
         addTimelineEvent(
                 saved,
                 "ACKNOWLEDGED",
-                "Incident acknowledged"
+                buildLifecycleMessage("Incident acknowledged", request)
         );
 
         return mapToResponse(saved);
     }
 
     @Transactional
-    public IncidentResponse resolveIncident(Long id) {
+    public IncidentResponse resolveIncident(Long id, IncidentActionRequest request) {
         Incident incident = findIncidentByIdOrThrow(id);
 
         validateStatusTransition(
@@ -183,14 +184,14 @@ public class IncidentService {
         addTimelineEvent(
                 saved,
                 "RESOLVED",
-                "Incident resolved"
+                buildLifecycleMessage("Incident resolved", request)
         );
 
         return mapToResponse(saved);
     }
 
     @Transactional
-    public IncidentResponse closeIncident(Long id) {
+    public IncidentResponse closeIncident(Long id, IncidentActionRequest request) {
         Incident incident = findIncidentByIdOrThrow(id);
 
         validateStatusTransition(
@@ -207,7 +208,7 @@ public class IncidentService {
         addTimelineEvent(
                 saved,
                 "CLOSED",
-                "Incident closed"
+                buildLifecycleMessage("Incident closed", request)
         );
 
         return mapToResponse(saved);
@@ -237,6 +238,14 @@ public class IncidentService {
         timeline.setMessage(message);
 
         incidentTimelineRepository.save(timeline);
+    }
+
+    private String buildLifecycleMessage(String defaultMessage, IncidentActionRequest request) {
+        if (request == null || request.getNote() == null || request.getNote().isBlank()) {
+            return defaultMessage;
+        }
+
+        return defaultMessage + ": " + request.getNote().trim();
     }
 
     private void validateIncidentNumberUniqueness(String incidentNumber) {

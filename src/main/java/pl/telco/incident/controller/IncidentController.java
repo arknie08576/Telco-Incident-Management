@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import pl.telco.incident.dto.IncidentActionRequest;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
@@ -60,18 +61,27 @@ public class IncidentController {
     }
 
     @PatchMapping("/{id}/acknowledge")
-    public IncidentResponse acknowledgeIncident(@PathVariable("id") Long id) {
-        return incidentService.acknowledgeIncident(id);
+    public IncidentResponse acknowledgeIncident(
+            @PathVariable("id") Long id,
+            @RequestBody(required = false) IncidentActionRequest request
+    ) {
+        return incidentService.acknowledgeIncident(id, request);
     }
 
     @PatchMapping("/{id}/resolve")
-    public IncidentResponse resolveIncident(@PathVariable("id") Long id) {
-        return incidentService.resolveIncident(id);
+    public IncidentResponse resolveIncident(
+            @PathVariable("id") Long id,
+            @RequestBody(required = false) IncidentActionRequest request
+    ) {
+        return incidentService.resolveIncident(id, request);
     }
 
     @PatchMapping("/{id}/close")
-    public IncidentResponse closeIncident(@PathVariable("id") Long id) {
-        return incidentService.closeIncident(id);
+    public IncidentResponse closeIncident(
+            @PathVariable("id") Long id,
+            @RequestBody(required = false) IncidentActionRequest request
+    ) {
+        return incidentService.closeIncident(id, request);
     }
 
     @GetMapping("/{id}/timeline")
