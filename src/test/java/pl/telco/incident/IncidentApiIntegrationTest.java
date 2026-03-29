@@ -164,6 +164,100 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void createIncidentShouldReturnBadRequestWhenRootNodeIdDoesNotMatchRootRole() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-WAW-01", NodeType.ROUTER, "MAZOWIECKIE");
+        NetworkNode affectedNode = saveNode("RAN-GNB-WAW-01", NodeType.G_NODE_B, "MAZOWIECKIE");
+
+        String requestBody = """
+                {
+                  "incidentNumber": "INC-102A",
+                  "title": "Invalid root mapping",
+                  "priority": "HIGH",
+                  "region": "MAZOWIECKIE",
+                  "rootNodeId": %d,
+                  "nodes": [
+                    {
+                      "networkNodeId": %d,
+                      "role": "ROOT"
+                    },
+                    {
+                      "networkNodeId": %d,
+                      "role": "AFFECTED"
+                    }
+                  ]
+                }
+                """.formatted(affectedNode.getId(), rootNode.getId(), affectedNode.getId());
+
+        mockMvc.perform(post("/api/incidents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("rootNodeId must match the node with role ROOT"));
+    }
+
+    @Test
+    void createIncidentShouldReturnNotFoundWhenRootNodeDoesNotExist() throws Exception {
+        NetworkNode affectedNode = saveNode("RAN-GNB-WAW-01", NodeType.G_NODE_B, "MAZOWIECKIE");
+
+        String requestBody = """
+                {
+                  "incidentNumber": "INC-102B",
+                  "title": "Missing root node",
+                  "priority": "HIGH",
+                  "region": "MAZOWIECKIE",
+                  "rootNodeId": 9999,
+                  "nodes": [
+                    {
+                      "networkNodeId": 9999,
+                      "role": "ROOT"
+                    },
+                    {
+                      "networkNodeId": %d,
+                      "role": "AFFECTED"
+                    }
+                  ]
+                }
+                """.formatted(affectedNode.getId());
+
+        mockMvc.perform(post("/api/incidents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Root node not found: 9999"));
+    }
+
+    @Test
+    void createIncidentShouldReturnNotFoundWhenAffectedNodeDoesNotExist() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-WAW-01", NodeType.ROUTER, "MAZOWIECKIE");
+
+        String requestBody = """
+                {
+                  "incidentNumber": "INC-102C",
+                  "title": "Missing affected node",
+                  "priority": "HIGH",
+                  "region": "MAZOWIECKIE",
+                  "rootNodeId": %d,
+                  "nodes": [
+                    {
+                      "networkNodeId": %d,
+                      "role": "ROOT"
+                    },
+                    {
+                      "networkNodeId": 9998,
+                      "role": "AFFECTED"
+                    }
+                  ]
+                }
+                """.formatted(rootNode.getId(), rootNode.getId());
+
+        mockMvc.perform(post("/api/incidents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Network node not found: 9998"));
+    }
+
+    @Test
     void lifecycleEndpointsShouldUpdateStatusTimestampsAndTimelineMessages() throws Exception {
         NetworkNode rootNode = saveNode("CORE-SBC-WAW-01", NodeType.SBC, "SLASKIE");
         NetworkNode affectedNode = saveNode("RAN-GNB-KAT-01", NodeType.G_NODE_B, "SLASKIE");
@@ -221,6 +315,20 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void acknowledgeIncidentShouldReturnNotFoundForMissingIncident() throws Exception {
+        mockMvc.perform(patch("/api/incidents/{id}/acknowledge", 9999L))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Incident not found: 9999"));
+    }
+
+    @Test
+    void getIncidentByIdShouldReturnNotFoundForMissingIncident() throws Exception {
+        mockMvc.perform(get("/api/incidents/{id}", 9999L))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Incident not found: 9999"));
+    }
+
+    @Test
     void getIncidentTimelineShouldReturnEventsOrderedByCreatedAtAscending() throws Exception {
         NetworkNode rootNode = saveNode("CORE-RTR-POZ-01", NodeType.ROUTER, "WIELKOPOLSKIE");
         Incident incident = saveIncident("INC-105", "Timeline order", IncidentStatus.RESOLVED, IncidentPriority.HIGH, "WIELKOPOLSKIE", rootNode);
@@ -235,6 +343,13 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
                 .andExpect(jsonPath("$[0].eventType").value("CREATED"))
                 .andExpect(jsonPath("$[1].eventType").value("ACKNOWLEDGED"))
                 .andExpect(jsonPath("$[2].eventType").value("RESOLVED"));
+    }
+
+    @Test
+    void getIncidentTimelineShouldReturnNotFoundForMissingIncident() throws Exception {
+        mockMvc.perform(get("/api/incidents/{id}/timeline", 9999L))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Incident not found: 9999"));
     }
 
     @Test
@@ -259,6 +374,75 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
                 .andExpect(jsonPath("$.content.length()").value(2))
                 .andExpect(jsonPath("$.content[0].incidentNumber").value("INC-200"))
                 .andExpect(jsonPath("$.content[1].incidentNumber").value("INC-201"));
+    }
+
+    @Test
+    void getAllIncidentsShouldReturnRequestedPageWithPaginationMetadata() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-WAW-01", NodeType.ROUTER, "MAZOWIECKIE");
+
+        saveIncident("INC-501", "Incident 1", IncidentStatus.OPEN, IncidentPriority.HIGH, "MAZOWIECKIE", rootNode);
+        saveIncident("INC-502", "Incident 2", IncidentStatus.OPEN, IncidentPriority.HIGH, "MAZOWIECKIE", rootNode);
+        saveIncident("INC-503", "Incident 3", IncidentStatus.OPEN, IncidentPriority.HIGH, "MAZOWIECKIE", rootNode);
+        saveIncident("INC-504", "Incident 4", IncidentStatus.OPEN, IncidentPriority.HIGH, "MAZOWIECKIE", rootNode);
+        saveIncident("INC-505", "Incident 5", IncidentStatus.OPEN, IncidentPriority.HIGH, "MAZOWIECKIE", rootNode);
+
+        mockMvc.perform(get("/api/incidents")
+                        .param("sortBy", "incidentNumber")
+                        .param("direction", "asc")
+                        .param("page", "1")
+                        .param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].incidentNumber").value("INC-503"))
+                .andExpect(jsonPath("$.content[1].incidentNumber").value("INC-504"))
+                .andExpect(jsonPath("$.number").value(1))
+                .andExpect(jsonPath("$.size").value(2))
+                .andExpect(jsonPath("$.totalElements").value(5))
+                .andExpect(jsonPath("$.totalPages").value(3))
+                .andExpect(jsonPath("$.first").value(false))
+                .andExpect(jsonPath("$.last").value(false));
+    }
+
+    @Test
+    void getAllIncidentsShouldReturnBadRequestForUnsupportedSortBy() throws Exception {
+        mockMvc.perform(get("/api/incidents")
+                        .param("sortBy", "createdAt"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Unsupported sortBy value: createdAt"));
+    }
+
+    @Test
+    void getAllIncidentsShouldReturnBadRequestForUnsupportedDirection() throws Exception {
+        mockMvc.perform(get("/api/incidents")
+                        .param("direction", "sideways"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Unsupported direction value: sideways"));
+    }
+
+    @Test
+    void getAllIncidentsShouldReturnBadRequestForNegativePage() throws Exception {
+        mockMvc.perform(get("/api/incidents")
+                        .param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Validation failed"))
+                .andExpect(jsonPath("$.fieldErrors['getAllIncidents.page']").value("must be greater than or equal to 0"));
+    }
+
+    @Test
+    void getAllIncidentsShouldReturnBadRequestForSizeGreaterThanMaximum() throws Exception {
+        mockMvc.perform(get("/api/incidents")
+                        .param("size", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Validation failed"))
+                .andExpect(jsonPath("$.fieldErrors['getAllIncidents.size']").value("must be less than or equal to 100"));
+    }
+
+    @Test
+    void getAllIncidentsShouldReturnBadRequestForInvalidPriorityEnum() throws Exception {
+        mockMvc.perform(get("/api/incidents")
+                        .param("priority", "URGENT"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value 'URGENT' for parameter 'priority'"));
     }
 
     private Long createIncidentThroughApi(NetworkNode rootNode, NetworkNode affectedNode, String incidentNumber) throws Exception {
