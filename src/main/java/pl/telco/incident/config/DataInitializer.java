@@ -2,6 +2,7 @@ package pl.telco.incident.config;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -27,6 +28,7 @@ public class DataInitializer {
     private final JdbcTemplate jdbcTemplate;
 
     @Bean
+    @ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true", matchIfMissing = true)
     public CommandLineRunner initData() {
         return args -> {
             seedNetworkNodesIfEmpty();
