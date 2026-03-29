@@ -4,7 +4,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -19,6 +18,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import pl.telco.incident.dto.IncidentActionRequest;
 import pl.telco.incident.dto.IncidentCreateRequest;
+import pl.telco.incident.dto.IncidentPageResponse;
 import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
 import pl.telco.incident.entity.enums.IncidentPriority;
@@ -87,14 +87,18 @@ public class IncidentController {
             description = "Returns a paginated incident list with optional filters for priority, region, planned work and status."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Incident page returned"),
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Incident page returned",
+                    content = @Content(schema = @Schema(implementation = IncidentPageResponse.class))
+            ),
             @ApiResponse(
                     responseCode = "400",
                     description = "Unsupported filters, invalid enums or invalid pagination values",
                     content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
             )
     })
-    public Page<IncidentResponse> getAllIncidents(
+    public IncidentPageResponse getAllIncidents(
             @Parameter(description = "Zero-based page index", example = "0")
             @RequestParam(name = "page", defaultValue = "0") @Min(0) int page,
             @Parameter(description = "Page size, from 1 to 100", example = "10")
@@ -112,7 +116,7 @@ public class IncidentController {
             @Parameter(description = "Filter by lifecycle status", example = "OPEN")
             @RequestParam(name = "status", required = false) IncidentStatus status
     ) {
-        return incidentService.getAllIncidents(
+        Page<IncidentResponse> incidentPage = incidentService.getAllIncidents(
                 page,
                 size,
                 sortBy,
@@ -122,6 +126,8 @@ public class IncidentController {
                 possiblyPlanned,
                 status
         );
+
+        return IncidentPageResponse.from(incidentPage);
     }
 
     @PatchMapping("/{id}/acknowledge")

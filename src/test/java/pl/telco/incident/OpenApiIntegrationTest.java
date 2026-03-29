@@ -24,6 +24,7 @@ class OpenApiIntegrationTest extends AbstractPostgresIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/incidents'].get.summary").value("List incidents"))
                 .andExpect(jsonPath("$.paths['/api/incidents/{id}/timeline'].get.summary").value("Get incident timeline"))
                 .andExpect(jsonPath("$.components.schemas.IncidentCreateRequest.required", hasItem("incidentNumber")))
+                .andExpect(jsonPath("$.components.schemas.IncidentPageResponse.properties.totalElements.type").value("integer"))
                 .andExpect(jsonPath("$.components.schemas.ApiErrorResponse.properties.message.type").value("string"));
     }
 
