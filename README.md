@@ -252,6 +252,7 @@ Przykladowe pola w logach:
 Repo zawiera prosty starter do Kibany:
 - importowalny dashboard: `elk/kibana/saved-objects/telco-incident-observability.ndjson`
 - skrypt importu: `elk/kibana/import-saved-objects.ps1`
+- generator ruchu demo do API: `elk/demo/generate-dashboard-data.ps1`
 - paczka gotowych KQL: `elk/kibana/queries/incident-kql.md`
 
 Import dashboardu:
@@ -260,6 +261,29 @@ Import dashboardu:
 .\elk\kibana\import-saved-objects.ps1
 ```
 
+### Szybkie nakarmienie dashboardu danymi
+
+Jesli chcesz szybko zobaczyc niepuste panele w Kibanie, uruchom generator ruchu:
+
+```powershell
+.\elk\demo\generate-dashboard-data.ps1
+```
+
+Domyslnie skrypt:
+- zaklada lokalny backend pod `http://localhost:8080`
+- korzysta z seed node'ow `1` jako `ROOT` oraz `2,3` jako `AFFECTED`
+- tworzy kilka incidentow
+- wykonuje `update`, `acknowledge`, `resolve`, `close`
+- dorzuca kilka `GET` do listy, detalu i timeline
+
+Jesli masz inne ID node'ow albo inny adres aplikacji:
+
+```powershell
+.\elk\demo\generate-dashboard-data.ps1 -BaseUrl http://localhost:8080 -RootNodeId 5 -AffectedNodeIds 6,7 -IncidentCount 4
+```
+
+Po odpaleniu skryptu ustaw w Kibanie zakres czasu na `Last 24 hours` i kliknij `Refresh`.
+
 Po imporcie w Kibanie pojawi sie dashboard:
 
 ```text
@@ -267,8 +291,13 @@ Telco Incident Observability
 ```
 
 To nie jest rozbudowany dashboard produkcyjny. To lekki starter pod projekt studencki:
-- overview panel z najwazniejszymi polami structured logging
-- panel z gotowymi KQL query do szybkiego kopiowania do Discover
+- metric z laczna liczba eventow incidentow
+- metric z bledami HTTP dla incident API
+- rozklad po `incidentStatus`
+- rozklad po `priority`
+- eventy w czasie
+- rozklad po `eventAction`
+- tabele ostatnich eventow do szybkiego drilldownu
 
 ## Incident API
 
