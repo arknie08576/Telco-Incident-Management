@@ -1,6 +1,8 @@
 package pl.telco.incident.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import net.logstash.logback.argument.StructuredArguments;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -53,6 +55,7 @@ import static pl.telco.incident.repository.specification.IncidentSpecifications.
 import static pl.telco.incident.repository.specification.IncidentSpecifications.closedAtFrom;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.closedAtTo;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class IncidentService {
@@ -116,6 +119,16 @@ public class IncidentService {
                 saved,
                 "CREATED",
                 "Incident created"
+        );
+
+        log.info(
+                "incident_created {} {} {} {} {} {}",
+                StructuredArguments.keyValue("incidentId", saved.getId()),
+                StructuredArguments.keyValue("incidentNumber", saved.getIncidentNumber()),
+                StructuredArguments.keyValue("status", saved.getStatus()),
+                StructuredArguments.keyValue("priority", saved.getPriority()),
+                StructuredArguments.keyValue("region", saved.getRegion()),
+                StructuredArguments.keyValue("rootNodeId", saved.getRootNode().getId())
         );
 
         return mapToResponse(saved);
@@ -242,6 +255,14 @@ public class IncidentService {
         Incident saved = incidentRepository.save(incident);
         addTimelineEvent(saved, "UPDATED", buildUpdateMessage(changedFields));
 
+        log.info(
+                "incident_updated {} {} {} {}",
+                StructuredArguments.keyValue("incidentId", saved.getId()),
+                StructuredArguments.keyValue("incidentNumber", saved.getIncidentNumber()),
+                StructuredArguments.keyValue("status", saved.getStatus()),
+                StructuredArguments.keyValue("changedFields", changedFields)
+        );
+
         return mapToResponse(saved);
     }
 
@@ -275,6 +296,16 @@ public class IncidentService {
                 buildLifecycleMessage("Incident acknowledged", request)
         );
 
+        log.info(
+                "incident_acknowledged {} {} {} {} {} {}",
+                StructuredArguments.keyValue("incidentId", saved.getId()),
+                StructuredArguments.keyValue("incidentNumber", saved.getIncidentNumber()),
+                StructuredArguments.keyValue("previousStatus", IncidentStatus.OPEN),
+                StructuredArguments.keyValue("status", saved.getStatus()),
+                StructuredArguments.keyValue("acknowledgedAt", saved.getAcknowledgedAt()),
+                StructuredArguments.keyValue("noteProvided", hasNote(request))
+        );
+
         return mapToResponse(saved);
     }
 
@@ -299,6 +330,16 @@ public class IncidentService {
                 buildLifecycleMessage("Incident resolved", request)
         );
 
+        log.info(
+                "incident_resolved {} {} {} {} {} {}",
+                StructuredArguments.keyValue("incidentId", saved.getId()),
+                StructuredArguments.keyValue("incidentNumber", saved.getIncidentNumber()),
+                StructuredArguments.keyValue("previousStatus", IncidentStatus.ACKNOWLEDGED),
+                StructuredArguments.keyValue("status", saved.getStatus()),
+                StructuredArguments.keyValue("resolvedAt", saved.getResolvedAt()),
+                StructuredArguments.keyValue("noteProvided", hasNote(request))
+        );
+
         return mapToResponse(saved);
     }
 
@@ -321,6 +362,16 @@ public class IncidentService {
                 saved,
                 "CLOSED",
                 buildLifecycleMessage("Incident closed", request)
+        );
+
+        log.info(
+                "incident_closed {} {} {} {} {} {}",
+                StructuredArguments.keyValue("incidentId", saved.getId()),
+                StructuredArguments.keyValue("incidentNumber", saved.getIncidentNumber()),
+                StructuredArguments.keyValue("previousStatus", IncidentStatus.RESOLVED),
+                StructuredArguments.keyValue("status", saved.getStatus()),
+                StructuredArguments.keyValue("closedAt", saved.getClosedAt()),
+                StructuredArguments.keyValue("noteProvided", hasNote(request))
         );
 
         return mapToResponse(saved);
@@ -353,11 +404,15 @@ public class IncidentService {
     }
 
     private String buildLifecycleMessage(String defaultMessage, IncidentActionRequest request) {
-        if (request == null || request.getNote() == null || request.getNote().isBlank()) {
+        if (!hasNote(request)) {
             return defaultMessage;
         }
 
         return defaultMessage + ": " + request.getNote().trim();
+    }
+
+    private boolean hasNote(IncidentActionRequest request) {
+        return request != null && request.getNote() != null && !request.getNote().isBlank();
     }
 
     private void validateIncidentNumberUniqueness(String incidentNumber) {

@@ -43,6 +43,7 @@ Obslugiwane endpointy:
 - Springdoc OpenAPI / Swagger UI
 - JUnit 5
 - Testcontainers
+- Elasticsearch + Logstash + Kibana (opcjonalnie, lokalnie)
 
 ## Architektura w repo
 
@@ -172,6 +173,56 @@ Przyklad wylaczenia seeda:
 ```powershell
 .\mvnw spring-boot:run "-Dspring-boot.run.jvmArguments=-Dapp.seed.enabled=false"
 ```
+
+## Observability i ELK
+
+Aplikacja ma przygotowane podstawy pod centralizacje logow:
+- `X-Request-Id` dla kazdego requestu
+- logowanie request/response na warstwie HTTP
+- logi biznesowe dla create, update i lifecycle incidentow
+- logowanie bledow w `GlobalExceptionHandler`
+- profil `elk`, ktory wysyla logi JSON bezposrednio do Logstash po TCP
+
+### Uruchomienie lokalnego stacka ELK
+
+Start kontenerow:
+
+```powershell
+docker compose -f docker-compose.elk.yml up -d
+```
+
+Dostepne endpointy:
+- Elasticsearch: `http://localhost:9200`
+- Kibana: `http://localhost:5601`
+- Logstash TCP input: `localhost:5000`
+
+### Start aplikacji z profilem ELK
+
+```powershell
+.\mvnw spring-boot:run "-Dspring-boot.run.profiles=elk"
+```
+
+Po starcie aplikacji logi trafia do Logstash, a potem do Elasticsearch do indeksu:
+
+```text
+telco-incident-management-YYYY.MM.dd
+```
+
+W Kibanie warto zalozyc data view:
+
+```text
+telco-incident-management-*
+```
+
+Przykladowe pola w logach:
+- `requestId`
+- `method`
+- `path`
+- `status`
+- `durationMs`
+- `incidentId`
+- `incidentNumber`
+- `service`
 
 ## Incident API
 
