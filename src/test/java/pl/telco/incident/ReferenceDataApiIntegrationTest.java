@@ -106,6 +106,20 @@ class ReferenceDataApiIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void networkNodeDeleteShouldRejectWhenNodeIsReferencedByIncident() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-REF-01", NodeType.ROUTER, "MAZOWIECKIE");
+        NetworkNode affectedNode = saveNode("RAN-GNB-REF-01", NodeType.G_NODE_B, "MAZOWIECKIE");
+
+        createIncident(rootNode.getId(), rootNode.getId(), affectedNode.getId(), "INC-NODE-DELETE-CONFLICT");
+
+        mockMvc.perform(delete("/api/network-nodes/{id}", rootNode.getId()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(
+                        "Network node is still referenced and cannot be deleted: " + rootNode.getId()
+                ));
+    }
+
+    @Test
     void incidentNodeDirectCrudShouldWork() throws Exception {
         NetworkNode rootNode = saveNode("CORE-RTR-POZ-01", NodeType.ROUTER, "WIELKOPOLSKIE");
         NetworkNode firstAffectedNode = saveNode("RAN-GNB-POZ-01", NodeType.G_NODE_B, "WIELKOPOLSKIE");
@@ -352,6 +366,46 @@ class ReferenceDataApiIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void maintenanceWindowCreateShouldRejectInvalidTimeRange() throws Exception {
+        NetworkNode node = saveNode("RAN-GNB-LUB-01", NodeType.G_NODE_B, "LUBELSKIE");
+
+        mockMvc.perform(post("/api/maintenance-windows")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Invalid window",
+                                  "description": "Range should fail",
+                                  "status": "PLANNED",
+                                  "startTime": "2026-04-05T12:00:00",
+                                  "endTime": "2026-04-05T12:00:00",
+                                  "networkNodeIds": [%d]
+                                }
+                                """.formatted(node.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("endTime must be later than startTime"));
+    }
+
+    @Test
+    void maintenanceWindowCreateShouldRejectDuplicateNetworkNodeIds() throws Exception {
+        NetworkNode node = saveNode("RAN-GNB-RZE-01", NodeType.G_NODE_B, "PODKARPACKIE");
+
+        mockMvc.perform(post("/api/maintenance-windows")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Duplicate nodes window",
+                                  "description": "Duplicate node ids should fail",
+                                  "status": "PLANNED",
+                                  "startTime": "2026-04-05T10:00:00",
+                                  "endTime": "2026-04-05T12:00:00",
+                                  "networkNodeIds": [%d, %d]
+                                }
+                                """.formatted(node.getId(), node.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Duplicate networkNodeId in maintenance nodes: " + node.getId()));
+    }
+
+    @Test
     void maintenanceNodeDirectCrudShouldWork() throws Exception {
         NetworkNode firstNode = saveNode("RAN-ENB-KRK-01", NodeType.E_NODE_B, "MALOPOLSKIE");
         NetworkNode secondNode = saveNode("RAN-ENB-KRK-02", NodeType.E_NODE_B, "MALOPOLSKIE");
@@ -492,6 +546,66 @@ class ReferenceDataApiIntegrationTest extends AbstractPostgresIntegrationTest {
 
         mockMvc.perform(delete("/api/alarm-events/{id}", alarmId))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void alarmEventCreateShouldRejectReceivedAtBeforeOccurredAt() throws Exception {
+        NetworkNode node = saveNode("CORE-RTR-TOR-01", NodeType.ROUTER, "KUJAWSKO_POMORSKIE");
+
+        mockMvc.perform(post("/api/alarm-events")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sourceSystem": "OSS",
+                                  "externalId": "ALARM-BAD-TIME",
+                                  "networkNodeId": %d,
+                                  "alarmType": "LINK_DOWN",
+                                  "severity": "MAJOR",
+                                  "status": "OPEN",
+                                  "description": "Invalid timing",
+                                  "suppressedByMaintenance": false,
+                                  "occurredAt": "2026-03-30T10:16:00",
+                                  "receivedAt": "2026-03-30T10:15:00"
+                                }
+                                """.formatted(node.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("receivedAt must be greater than or equal to occurredAt"));
+    }
+
+    @Test
+    void alarmEventCreateShouldRejectIncidentThatDoesNotIncludeNetworkNode() throws Exception {
+        NetworkNode incidentRootNode = saveNode("CORE-RTR-OPL-01", NodeType.ROUTER, "OPOLSKIE");
+        NetworkNode incidentAffectedNode = saveNode("RAN-GNB-OPL-01", NodeType.G_NODE_B, "OPOLSKIE");
+        NetworkNode unrelatedNode = saveNode("RAN-GNB-OPL-99", NodeType.G_NODE_B, "OPOLSKIE");
+        long incidentId = createIncident(
+                incidentRootNode.getId(),
+                incidentRootNode.getId(),
+                incidentAffectedNode.getId(),
+                "INC-ALARM-NODE-MISMATCH"
+        );
+
+        mockMvc.perform(post("/api/alarm-events")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sourceSystem": "OSS",
+                                  "externalId": "ALARM-NODE-MISMATCH",
+                                  "networkNodeId": %d,
+                                  "incidentId": %d,
+                                  "alarmType": "LINK_DOWN",
+                                  "severity": "MAJOR",
+                                  "status": "OPEN",
+                                  "description": "Alarm node mismatch",
+                                  "suppressedByMaintenance": false,
+                                  "occurredAt": "2026-03-30T10:15:00",
+                                  "receivedAt": "2026-03-30T10:16:00"
+                                }
+                                """.formatted(unrelatedNode.getId(), incidentId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Referenced incident does not include network node: %d/%d"
+                                .formatted(incidentId, unrelatedNode.getId())
+                ));
     }
 
     @Test

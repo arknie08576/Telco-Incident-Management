@@ -8,9 +8,11 @@ import pl.telco.incident.dto.AlarmEventResponse;
 import pl.telco.incident.entity.AlarmEvent;
 import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.NetworkNode;
+import pl.telco.incident.exception.BadRequestException;
 import pl.telco.incident.exception.ConflictException;
 import pl.telco.incident.exception.ResourceNotFoundException;
 import pl.telco.incident.repository.AlarmEventRepository;
+import pl.telco.incident.repository.IncidentNodeRepository;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
@@ -23,6 +25,7 @@ public class AlarmEventService {
     private final AlarmEventRepository alarmEventRepository;
     private final NetworkNodeRepository networkNodeRepository;
     private final IncidentRepository incidentRepository;
+    private final IncidentNodeRepository incidentNodeRepository;
 
     @Transactional(readOnly = true)
     public List<AlarmEventResponse> getAllAlarmEvents() {
@@ -96,6 +99,8 @@ public class AlarmEventService {
                     .orElseThrow(() -> new ResourceNotFoundException("Incident not found: " + request.getIncidentId()));
         }
 
+        validateRequest(request, networkNode, incident);
+
         alarmEvent.setSourceSystem(request.getSourceSystem().trim());
         alarmEvent.setExternalId(request.getExternalId().trim());
         alarmEvent.setNetworkNode(networkNode);
@@ -103,10 +108,23 @@ public class AlarmEventService {
         alarmEvent.setAlarmType(request.getAlarmType().trim());
         alarmEvent.setSeverity(request.getSeverity());
         alarmEvent.setStatus(request.getStatus());
-        alarmEvent.setDescription(request.getDescription());
+        alarmEvent.setDescription(request.getDescription() == null ? null : request.getDescription().trim());
         alarmEvent.setSuppressedByMaintenance(request.getSuppressedByMaintenance());
         alarmEvent.setOccurredAt(request.getOccurredAt());
         alarmEvent.setReceivedAt(request.getReceivedAt());
+    }
+
+    private void validateRequest(AlarmEventRequest request, NetworkNode networkNode, Incident incident) {
+        if (request.getReceivedAt() != null && request.getReceivedAt().isBefore(request.getOccurredAt())) {
+            throw new BadRequestException("receivedAt must be greater than or equal to occurredAt");
+        }
+
+        if (incident != null && !incidentNodeRepository.existsByIncidentIdAndNetworkNodeId(incident.getId(), networkNode.getId())) {
+            throw new BadRequestException(
+                    "Referenced incident does not include network node: %d/%d"
+                            .formatted(incident.getId(), networkNode.getId())
+            );
+        }
     }
 
     private AlarmEventResponse mapToResponse(AlarmEvent alarmEvent) {

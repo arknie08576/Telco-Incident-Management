@@ -1,6 +1,10 @@
 package pl.telco.incident.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +40,14 @@ public class NetworkNodeController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get network node by ID")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Network node found"),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Network node not found",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            )
+    })
     public NetworkNodeResponse getNetworkNodeById(@PathVariable("id") Long id) {
         return networkNodeService.getNetworkNodeById(id);
     }
@@ -43,12 +55,33 @@ public class NetworkNodeController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create network node")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Network node created"),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Network node name already exists",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            )
+    })
     public NetworkNodeResponse createNetworkNode(@Valid @RequestBody NetworkNodeRequest request) {
         return networkNodeService.createNetworkNode(request);
     }
 
     @PutMapping("/{id}")
     @Operation(summary = "Update network node")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Network node updated"),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Network node not found",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Network node name already exists",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            )
+    })
     public NetworkNodeResponse updateNetworkNode(
             @PathVariable("id") Long id,
             @Valid @RequestBody NetworkNodeRequest request
@@ -59,6 +92,19 @@ public class NetworkNodeController {
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Delete network node")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Network node deleted"),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Network node not found",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Network node is still referenced by other records",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            )
+    })
     public void deleteNetworkNode(@PathVariable("id") Long id) {
         networkNodeService.deleteNetworkNode(id);
     }

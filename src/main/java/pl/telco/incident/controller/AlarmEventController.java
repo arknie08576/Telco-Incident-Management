@@ -1,6 +1,10 @@
 package pl.telco.incident.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -43,12 +47,48 @@ public class AlarmEventController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create alarm event")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Alarm event created"),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid timestamp order or incident/network node mismatch",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Referenced incident or network node not found",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Alarm with the same sourceSystem/externalId already exists",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            )
+    })
     public AlarmEventResponse createAlarmEvent(@Valid @RequestBody AlarmEventRequest request) {
         return alarmEventService.createAlarmEvent(request);
     }
 
     @PutMapping("/{id}")
     @Operation(summary = "Update alarm event")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Alarm event updated"),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid timestamp order or incident/network node mismatch",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Alarm event or referenced entities not found",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Alarm with the same sourceSystem/externalId already exists",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            )
+    })
     public AlarmEventResponse updateAlarmEvent(
             @PathVariable("id") Long id,
             @Valid @RequestBody AlarmEventRequest request
