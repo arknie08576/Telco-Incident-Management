@@ -5,6 +5,7 @@ import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Schema(name = "IncidentResponse", description = "Current state of an incident.")
 public class IncidentResponse {
@@ -21,6 +22,13 @@ public class IncidentResponse {
     private IncidentPriority priority;
     @Schema(description = "Affected network region.", example = "MAZOWIECKIE")
     private String region;
+    @Schema(description = "Source alarm type reported by monitoring.", example = "HARDWARE", nullable = true)
+    private String sourceAlarmType;
+    @Schema(description = "Marks whether the incident may be related to planned maintenance.", example = "false")
+    private Boolean possiblyPlanned;
+    @Schema(description = "Identifier of the root network node.", example = "1", nullable = true)
+    private Long rootNodeId;
+    private List<IncidentNodeResponse> nodes;
     @Schema(description = "Timestamp when the incident was opened.", example = "2026-03-29T06:42:00")
     private LocalDateTime openedAt;
     @Schema(description = "Timestamp when the incident was acknowledged.", example = "2026-03-29T06:50:00", nullable = true)
@@ -76,6 +84,38 @@ public class IncidentResponse {
 
     public void setRegion(String region) {
         this.region = region;
+    }
+
+    public String getSourceAlarmType() {
+        return sourceAlarmType;
+    }
+
+    public void setSourceAlarmType(String sourceAlarmType) {
+        this.sourceAlarmType = sourceAlarmType;
+    }
+
+    public Boolean getPossiblyPlanned() {
+        return possiblyPlanned;
+    }
+
+    public void setPossiblyPlanned(Boolean possiblyPlanned) {
+        this.possiblyPlanned = possiblyPlanned;
+    }
+
+    public Long getRootNodeId() {
+        return rootNodeId;
+    }
+
+    public void setRootNodeId(Long rootNodeId) {
+        this.rootNodeId = rootNodeId;
+    }
+
+    public List<IncidentNodeResponse> getNodes() {
+        return nodes;
+    }
+
+    public void setNodes(List<IncidentNodeResponse> nodes) {
+        this.nodes = nodes;
     }
 
     public LocalDateTime getOpenedAt() {

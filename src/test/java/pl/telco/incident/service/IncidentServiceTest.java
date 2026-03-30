@@ -24,6 +24,7 @@ import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.entity.enums.NodeType;
 import pl.telco.incident.exception.BadRequestException;
 import pl.telco.incident.exception.ConflictException;
+import pl.telco.incident.repository.AlarmEventRepository;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.IncidentTimelineRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
@@ -51,6 +52,9 @@ class IncidentServiceTest {
 
     @Mock
     private IncidentTimelineRepository incidentTimelineRepository;
+
+    @Mock
+    private AlarmEventRepository alarmEventRepository;
 
     @InjectMocks
     private IncidentService incidentService;
@@ -174,7 +178,7 @@ class IncidentServiceTest {
     void updateIncidentShouldApplyChangedFieldsAndAddUpdatedTimelineEvent() {
         Incident incident = buildIncident(150L, "INC-150", IncidentStatus.OPEN);
         when(incidentRepository.findById(150L)).thenReturn(Optional.of(incident));
-        when(incidentRepository.findByIncidentNumber("INC-151")).thenReturn(Optional.empty());
+        when(incidentRepository.existsByIncidentNumberAndIdNot("INC-151", 150L)).thenReturn(false);
 
         IncidentUpdateRequest request = new IncidentUpdateRequest();
         request.setIncidentNumber("INC-151");
@@ -240,8 +244,7 @@ class IncidentServiceTest {
     void updateIncidentShouldRejectDuplicateIncidentNumber() {
         Incident incident = buildIncident(153L, "INC-153", IncidentStatus.OPEN);
         when(incidentRepository.findById(153L)).thenReturn(Optional.of(incident));
-        when(incidentRepository.findByIncidentNumber("INC-154"))
-                .thenReturn(Optional.of(Incident.builder().id(154L).incidentNumber("INC-154").build()));
+        when(incidentRepository.existsByIncidentNumberAndIdNot("INC-154", 153L)).thenReturn(true);
 
         IncidentUpdateRequest request = new IncidentUpdateRequest();
         request.setIncidentNumber("INC-154");

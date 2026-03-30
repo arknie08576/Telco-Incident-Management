@@ -288,7 +288,7 @@ class IncidentControllerWebMvcTest {
                 (id, request) -> new IncidentResponse();
 
         FakeIncidentService() {
-            super(null, null, null);
+            super(null, null, null, null);
         }
 
         void setCreateIncidentHandler(Function<IncidentCreateRequest, IncidentResponse> createIncidentHandler) {

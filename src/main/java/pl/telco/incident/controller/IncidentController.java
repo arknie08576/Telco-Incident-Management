@@ -22,6 +22,7 @@ import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentPageResponse;
 import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
+import pl.telco.incident.dto.IncidentTimelineUpsertRequest;
 import pl.telco.incident.dto.IncidentUpdateRequest;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
@@ -87,7 +88,7 @@ public class IncidentController {
     @PatchMapping("/{id}")
     @Operation(
             summary = "Update incident",
-            description = "Partially updates editable incident fields. Lifecycle status and incident nodes are not changed by this endpoint."
+            description = "Partially updates editable incident fields, including root node and incident node graph."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Incident updated"),
@@ -113,6 +114,16 @@ public class IncidentController {
             @Valid @RequestBody IncidentUpdateRequest request
     ) {
         return incidentService.updateIncident(id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(
+            summary = "Delete incident",
+            description = "Deletes an incident when it is not referenced by alarm events."
+    )
+    public void deleteIncident(@PathVariable("id") Long id) {
+        incidentService.deleteIncident(id);
     }
 
     @GetMapping
@@ -308,5 +319,44 @@ public class IncidentController {
     })
     public List<IncidentTimelineResponse> getIncidentTimeline(@PathVariable("id") Long id) {
         return incidentService.getIncidentTimeline(id);
+    }
+
+    @PostMapping("/{id}/timeline")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(
+            summary = "Create manual incident timeline event",
+            description = "Creates a manual timeline event for the selected incident."
+    )
+    public IncidentTimelineResponse createIncidentTimelineEvent(
+            @PathVariable("id") Long id,
+            @Valid @RequestBody IncidentTimelineUpsertRequest request
+    ) {
+        return incidentService.createIncidentTimelineEvent(id, request);
+    }
+
+    @PutMapping("/{id}/timeline/{timelineId}")
+    @Operation(
+            summary = "Update incident timeline event",
+            description = "Updates a manual incident timeline event."
+    )
+    public IncidentTimelineResponse updateIncidentTimelineEvent(
+            @PathVariable("id") Long id,
+            @PathVariable("timelineId") Long timelineId,
+            @Valid @RequestBody IncidentTimelineUpsertRequest request
+    ) {
+        return incidentService.updateIncidentTimelineEvent(id, timelineId, request);
+    }
+
+    @DeleteMapping("/{id}/timeline/{timelineId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(
+            summary = "Delete incident timeline event",
+            description = "Deletes a manual incident timeline event."
+    )
+    public void deleteIncidentTimelineEvent(
+            @PathVariable("id") Long id,
+            @PathVariable("timelineId") Long timelineId
+    ) {
+        incidentService.deleteIncidentTimelineEvent(id, timelineId);
     }
 }

@@ -1,9 +1,13 @@
 package pl.telco.incident.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import pl.telco.incident.entity.enums.IncidentPriority;
+
+import java.util.List;
 
 @Schema(name = "IncidentUpdateRequest", description = "Partial payload used to update editable incident fields.")
 public class IncidentUpdateRequest {
@@ -33,6 +37,14 @@ public class IncidentUpdateRequest {
 
     @Schema(description = "Marks whether the incident may be related to planned maintenance.", example = "true")
     private Boolean possiblyPlanned;
+
+    @Schema(description = "Identifier of the root network node.", example = "1")
+    @Positive(message = "rootNodeId must be greater than 0")
+    private Long rootNodeId;
+
+    @Schema(description = "Optional replacement for the full incident node set, including exactly one ROOT node.")
+    @Valid
+    private List<IncidentNodeRequest> nodes;
 
     public String getIncidentNumber() {
         return incidentNumber;
@@ -80,5 +92,21 @@ public class IncidentUpdateRequest {
 
     public void setPossiblyPlanned(Boolean possiblyPlanned) {
         this.possiblyPlanned = possiblyPlanned;
+    }
+
+    public Long getRootNodeId() {
+        return rootNodeId;
+    }
+
+    public void setRootNodeId(Long rootNodeId) {
+        this.rootNodeId = rootNodeId;
+    }
+
+    public List<IncidentNodeRequest> getNodes() {
+        return nodes;
+    }
+
+    public void setNodes(List<IncidentNodeRequest> nodes) {
+        this.nodes = nodes;
     }
 }

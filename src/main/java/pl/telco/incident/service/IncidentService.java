@@ -13,8 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.IncidentActionRequest;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentNodeRequest;
+import pl.telco.incident.dto.IncidentNodeResponse;
 import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
+import pl.telco.incident.dto.IncidentTimelineUpsertRequest;
 import pl.telco.incident.dto.IncidentUpdateRequest;
 import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.IncidentNode;
@@ -26,6 +28,7 @@ import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.exception.BadRequestException;
 import pl.telco.incident.exception.ConflictException;
 import pl.telco.incident.exception.ResourceNotFoundException;
+import pl.telco.incident.repository.AlarmEventRepository;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.IncidentTimelineRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
@@ -40,7 +43,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 
+import static pl.telco.incident.repository.specification.IncidentSpecifications.acknowledgedAtFrom;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.acknowledgedAtTo;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.closedAtFrom;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.closedAtTo;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasPossiblyPlanned;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasPriorities;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasRegion;
@@ -49,13 +57,9 @@ import static pl.telco.incident.repository.specification.IncidentSpecifications.
 import static pl.telco.incident.repository.specification.IncidentSpecifications.incidentNumberContains;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.openedAtFrom;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.openedAtTo;
-import static pl.telco.incident.repository.specification.IncidentSpecifications.titleContains;
-import static pl.telco.incident.repository.specification.IncidentSpecifications.acknowledgedAtFrom;
-import static pl.telco.incident.repository.specification.IncidentSpecifications.acknowledgedAtTo;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.resolvedAtFrom;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.resolvedAtTo;
-import static pl.telco.incident.repository.specification.IncidentSpecifications.closedAtFrom;
-import static pl.telco.incident.repository.specification.IncidentSpecifications.closedAtTo;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.titleContains;
 
 @Slf4j
 @Service
@@ -65,6 +69,7 @@ public class IncidentService {
     private final IncidentRepository incidentRepository;
     private final NetworkNodeRepository networkNodeRepository;
     private final IncidentTimelineRepository incidentTimelineRepository;
+    private final AlarmEventRepository alarmEventRepository;
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "openedAt",
@@ -85,44 +90,26 @@ public class IncidentService {
     @Transactional
     public IncidentResponse createIncident(IncidentCreateRequest request) {
         validateIncidentNumberUniqueness(request.getIncidentNumber());
-        validateNodeUniqueness(request);
-        validateRootNodeConsistency(request);
 
-        NetworkNode rootNode = networkNodeRepository.findById(request.getRootNodeId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Root node not found: " + request.getRootNodeId()
-                ));
+        Long rootNodeId = request.getRootNodeId();
+        List<IncidentNodeRequest> nodeRequests = request.getNodes();
+        validateNodeUniqueness(nodeRequests);
+        validateRootNodeConsistency(rootNodeId, nodeRequests);
 
         Incident incident = new Incident();
-        incident.setIncidentNumber(request.getIncidentNumber());
-        incident.setTitle(request.getTitle());
+        incident.setIncidentNumber(request.getIncidentNumber().trim());
+        incident.setTitle(request.getTitle().trim());
         incident.setPriority(request.getPriority());
-        incident.setRegion(request.getRegion());
-        incident.setSourceAlarmType(request.getSourceAlarmType());
+        incident.setRegion(request.getRegion().trim());
+        incident.setSourceAlarmType(normalizeNullableString(request.getSourceAlarmType()));
         incident.setPossiblyPlanned(request.getPossiblyPlanned());
-        incident.setRootNode(rootNode);
+        incident.setRootNode(findRootNodeByIdOrThrow(rootNodeId));
 
-        for (IncidentNodeRequest nodeRequest : request.getNodes()) {
-            NetworkNode networkNode = networkNodeRepository.findById(nodeRequest.getNetworkNodeId())
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            "Network node not found: " + nodeRequest.getNetworkNodeId()
-                    ));
-
-            IncidentNode incidentNode = new IncidentNode();
-            incidentNode.setNetworkNode(networkNode);
-            incidentNode.setRole(nodeRequest.getRole());
-
-            incident.addIncidentNode(incidentNode);
-        }
+        replaceIncidentNodes(incident, nodeRequests);
 
         Incident saved = incidentRepository.save(incident);
 
-        addTimelineEvent(
-                saved,
-                "CREATED",
-                "Incident created"
-        );
-
+        addTimelineEvent(saved, "CREATED", "Incident created");
         logIncidentBusinessEvent("create", "CREATED", saved, null, null, false);
 
         return mapToResponse(saved);
@@ -187,8 +174,7 @@ public class IncidentService {
 
     @Transactional(readOnly = true)
     public IncidentResponse getIncidentById(Long id) {
-        Incident incident = findIncidentByIdOrThrow(id);
-        return mapToResponse(incident);
+        return mapToResponse(findIncidentByIdOrThrow(id));
     }
 
     @Transactional
@@ -199,12 +185,24 @@ public class IncidentService {
             throw new BadRequestException("Closed incidents cannot be edited");
         }
 
+        Long effectiveRootNodeId = request.getRootNodeId() != null
+                ? request.getRootNodeId()
+                : incident.getRootNode() != null ? incident.getRootNode().getId() : null;
+        List<IncidentNodeRequest> effectiveNodes = request.getNodes() != null
+                ? request.getNodes()
+                : mapCurrentNodesToRequests(incident.getIncidentNodes());
+
+        if (request.getNodes() != null || request.getRootNodeId() != null) {
+            validateNodeUniqueness(effectiveNodes);
+            validateRootNodeConsistency(effectiveRootNodeId, effectiveNodes);
+        }
+
         List<String> changedFields = new ArrayList<>();
 
         applyStringUpdate(
                 request.getIncidentNumber(),
                 incident.getIncidentNumber(),
-                this::validateIncidentNumberUniquenessForUpdate,
+                value -> validateIncidentNumberUniquenessForUpdate(value, id),
                 incident::setIncidentNumber,
                 "incidentNumber",
                 changedFields
@@ -212,7 +210,8 @@ public class IncidentService {
         applyStringUpdate(
                 request.getTitle(),
                 incident.getTitle(),
-                value -> { },
+                value -> {
+                },
                 incident::setTitle,
                 "title",
                 changedFields
@@ -221,15 +220,15 @@ public class IncidentService {
         applyStringUpdate(
                 request.getRegion(),
                 incident.getRegion(),
-                value -> { },
+                value -> {
+                },
                 incident::setRegion,
                 "region",
                 changedFields
         );
-        applyStringUpdate(
+        applyNullableStringUpdate(
                 request.getSourceAlarmType(),
                 incident.getSourceAlarmType(),
-                value -> { },
                 incident::setSourceAlarmType,
                 "sourceAlarmType",
                 changedFields
@@ -242,16 +241,37 @@ public class IncidentService {
                 changedFields
         );
 
+        if (request.getRootNodeId() != null && !Objects.equals(effectiveRootNodeId, incident.getRootNode().getId())) {
+            incident.setRootNode(findRootNodeByIdOrThrow(effectiveRootNodeId));
+            changedFields.add("rootNodeId");
+        }
+
+        if (request.getNodes() != null && !sameIncidentNodes(request.getNodes(), incident.getIncidentNodes())) {
+            replaceIncidentNodes(incident, request.getNodes());
+            incident.setRootNode(findRootNodeByIdOrThrow(effectiveRootNodeId));
+            changedFields.add("nodes");
+        }
+
         if (changedFields.isEmpty()) {
             throw new BadRequestException("Patch request does not change incident");
         }
 
         Incident saved = incidentRepository.save(incident);
         addTimelineEvent(saved, "UPDATED", buildUpdateMessage(changedFields));
-
         logIncidentBusinessEvent("update", "UPDATED", saved, null, changedFields, false);
 
         return mapToResponse(saved);
+    }
+
+    @Transactional
+    public void deleteIncident(Long id) {
+        Incident incident = findIncidentByIdOrThrow(id);
+
+        if (alarmEventRepository.countByIncidentId(id) > 0) {
+            throw new ConflictException("Incident is referenced by alarm events and cannot be deleted: " + id);
+        }
+
+        incidentRepository.delete(incident);
     }
 
     @Transactional(readOnly = true)
@@ -264,26 +284,56 @@ public class IncidentService {
     }
 
     @Transactional
+    public IncidentTimelineResponse createIncidentTimelineEvent(Long incidentId, IncidentTimelineUpsertRequest request) {
+        Incident incident = findIncidentByIdOrThrow(incidentId);
+
+        IncidentTimeline timeline = new IncidentTimeline();
+        timeline.setIncident(incident);
+        timeline.setEventType(request.getEventType().trim());
+        timeline.setMessage(request.getMessage().trim());
+
+        return mapTimelineToResponse(incidentTimelineRepository.save(timeline));
+    }
+
+    @Transactional
+    public IncidentTimelineResponse updateIncidentTimelineEvent(
+            Long incidentId,
+            Long timelineId,
+            IncidentTimelineUpsertRequest request
+    ) {
+        findIncidentByIdOrThrow(incidentId);
+
+        IncidentTimeline timeline = incidentTimelineRepository.findByIdAndIncidentId(timelineId, incidentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Incident timeline event not found: " + timelineId));
+
+        timeline.setEventType(request.getEventType().trim());
+        timeline.setMessage(request.getMessage().trim());
+
+        return mapTimelineToResponse(incidentTimelineRepository.save(timeline));
+    }
+
+    @Transactional
+    public void deleteIncidentTimelineEvent(Long incidentId, Long timelineId) {
+        findIncidentByIdOrThrow(incidentId);
+
+        IncidentTimeline timeline = incidentTimelineRepository.findByIdAndIncidentId(timelineId, incidentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Incident timeline event not found: " + timelineId));
+
+        incidentTimelineRepository.delete(timeline);
+    }
+
+    @Transactional
     public IncidentResponse acknowledgeIncident(Long id, IncidentActionRequest request) {
         Incident incident = findIncidentByIdOrThrow(id);
 
-        validateStatusTransition(
-                incident,
-                IncidentStatus.OPEN,
-                "Only OPEN incidents can be acknowledged"
-        );
+        validateStatusTransition(incident, IncidentStatus.OPEN, "Only OPEN incidents can be acknowledged");
 
         incident.setStatus(IncidentStatus.ACKNOWLEDGED);
         incident.setAcknowledgedAt(LocalDateTime.now());
 
         Incident saved = incidentRepository.save(incident);
 
-        addTimelineEvent(
-                saved,
-                "ACKNOWLEDGED",
-                buildLifecycleMessage("Incident acknowledged", request)
-        );
-
+        addTimelineEvent(saved, "ACKNOWLEDGED", buildLifecycleMessage("Incident acknowledged", request));
         logIncidentBusinessEvent("acknowledge", "ACKNOWLEDGED", saved, IncidentStatus.OPEN, null, hasNote(request));
 
         return mapToResponse(saved);
@@ -293,23 +343,14 @@ public class IncidentService {
     public IncidentResponse resolveIncident(Long id, IncidentActionRequest request) {
         Incident incident = findIncidentByIdOrThrow(id);
 
-        validateStatusTransition(
-                incident,
-                IncidentStatus.ACKNOWLEDGED,
-                "Only ACKNOWLEDGED incidents can be resolved"
-        );
+        validateStatusTransition(incident, IncidentStatus.ACKNOWLEDGED, "Only ACKNOWLEDGED incidents can be resolved");
 
         incident.setStatus(IncidentStatus.RESOLVED);
         incident.setResolvedAt(LocalDateTime.now());
 
         Incident saved = incidentRepository.save(incident);
 
-        addTimelineEvent(
-                saved,
-                "RESOLVED",
-                buildLifecycleMessage("Incident resolved", request)
-        );
-
+        addTimelineEvent(saved, "RESOLVED", buildLifecycleMessage("Incident resolved", request));
         logIncidentBusinessEvent("resolve", "RESOLVED", saved, IncidentStatus.ACKNOWLEDGED, null, hasNote(request));
 
         return mapToResponse(saved);
@@ -319,23 +360,14 @@ public class IncidentService {
     public IncidentResponse closeIncident(Long id, IncidentActionRequest request) {
         Incident incident = findIncidentByIdOrThrow(id);
 
-        validateStatusTransition(
-                incident,
-                IncidentStatus.RESOLVED,
-                "Only RESOLVED incidents can be closed"
-        );
+        validateStatusTransition(incident, IncidentStatus.RESOLVED, "Only RESOLVED incidents can be closed");
 
         incident.setStatus(IncidentStatus.CLOSED);
         incident.setClosedAt(LocalDateTime.now());
 
         Incident saved = incidentRepository.save(incident);
 
-        addTimelineEvent(
-                saved,
-                "CLOSED",
-                buildLifecycleMessage("Incident closed", request)
-        );
-
+        addTimelineEvent(saved, "CLOSED", buildLifecycleMessage("Incident closed", request));
         logIncidentBusinessEvent("close", "CLOSED", saved, IncidentStatus.RESOLVED, null, hasNote(request));
 
         return mapToResponse(saved);
@@ -376,9 +408,17 @@ public class IncidentService {
 
     private Incident findIncidentByIdOrThrow(Long id) {
         return incidentRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Incident not found: " + id
-                ));
+                .orElseThrow(() -> new ResourceNotFoundException("Incident not found: " + id));
+    }
+
+    private NetworkNode findNetworkNodeByIdOrThrow(Long id) {
+        return networkNodeRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Network node not found: " + id));
+    }
+
+    private NetworkNode findRootNodeByIdOrThrow(Long id) {
+        return networkNodeRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Root node not found: " + id));
     }
 
     private void validateStatusTransition(
@@ -413,26 +453,25 @@ public class IncidentService {
     }
 
     private void validateIncidentNumberUniqueness(String incidentNumber) {
-        if (incidentRepository.findByIncidentNumber(incidentNumber).isPresent()) {
+        String normalizedIncidentNumber = incidentNumber.trim();
+
+        if (incidentRepository.findByIncidentNumber(normalizedIncidentNumber).isPresent()) {
+            throw new ConflictException("Incident with number already exists: " + normalizedIncidentNumber);
+        }
+    }
+
+    private void validateIncidentNumberUniquenessForUpdate(String incidentNumber, Long incidentId) {
+        if (incidentRepository.existsByIncidentNumberAndIdNot(incidentNumber, incidentId)) {
             throw new ConflictException("Incident with number already exists: " + incidentNumber);
         }
     }
 
-    private void validateIncidentNumberUniquenessForUpdate(String incidentNumber) {
-        incidentRepository.findByIncidentNumber(incidentNumber)
-                .ifPresent(existingIncident -> {
-                    throw new ConflictException("Incident with number already exists: " + incidentNumber);
-                });
-    }
-
-    private void validateNodeUniqueness(IncidentCreateRequest request) {
+    private void validateNodeUniqueness(List<IncidentNodeRequest> nodeRequests) {
         Set<Long> uniqueNodeIds = new HashSet<>();
 
-        for (IncidentNodeRequest nodeRequest : request.getNodes()) {
+        for (IncidentNodeRequest nodeRequest : nodeRequests) {
             if (!uniqueNodeIds.add(nodeRequest.getNetworkNodeId())) {
-                throw new BadRequestException(
-                        "Duplicate networkNodeId in nodes: " + nodeRequest.getNetworkNodeId()
-                );
+                throw new BadRequestException("Duplicate networkNodeId in nodes: " + nodeRequest.getNetworkNodeId());
             }
         }
     }
@@ -472,8 +511,8 @@ public class IncidentService {
         return Long.class.equals(resultType) || long.class.equals(resultType);
     }
 
-    private void validateRootNodeConsistency(IncidentCreateRequest request) {
-        long rootCount = request.getNodes().stream()
+    private void validateRootNodeConsistency(Long rootNodeId, List<IncidentNodeRequest> nodes) {
+        long rootCount = nodes.stream()
                 .filter(node -> node.getRole() == IncidentNodeRole.ROOT)
                 .count();
 
@@ -481,11 +520,8 @@ public class IncidentService {
             throw new BadRequestException("Exactly one node must have role ROOT");
         }
 
-        boolean rootMatches = request.getNodes().stream()
-                .anyMatch(node ->
-                        node.getRole() == IncidentNodeRole.ROOT
-                                && request.getRootNodeId().equals(node.getNetworkNodeId())
-                );
+        boolean rootMatches = nodes.stream()
+                .anyMatch(node -> node.getRole() == IncidentNodeRole.ROOT && rootNodeId.equals(node.getNetworkNodeId()));
 
         if (!rootMatches) {
             throw new BadRequestException("rootNodeId must match the node with role ROOT");
@@ -564,8 +600,8 @@ public class IncidentService {
     private void applyStringUpdate(
             String requestedValue,
             String currentValue,
-            java.util.function.Consumer<String> validator,
-            java.util.function.Consumer<String> updater,
+            Consumer<String> validator,
+            Consumer<String> updater,
             String fieldName,
             List<String> changedFields
     ) {
@@ -584,10 +620,31 @@ public class IncidentService {
         changedFields.add(fieldName);
     }
 
+    private void applyNullableStringUpdate(
+            String requestedValue,
+            String currentValue,
+            Consumer<String> updater,
+            String fieldName,
+            List<String> changedFields
+    ) {
+        if (requestedValue == null) {
+            return;
+        }
+
+        String normalizedValue = normalizeNullableString(requestedValue);
+
+        if (Objects.equals(normalizedValue, currentValue)) {
+            return;
+        }
+
+        updater.accept(normalizedValue);
+        changedFields.add(fieldName);
+    }
+
     private <T> void applyObjectUpdate(
             T requestedValue,
             T currentValue,
-            java.util.function.Consumer<T> updater,
+            Consumer<T> updater,
             String fieldName,
             List<String> changedFields
     ) {
@@ -603,6 +660,62 @@ public class IncidentService {
         return "Incident updated: " + String.join(", ", changedFields);
     }
 
+    private void replaceIncidentNodes(Incident incident, List<IncidentNodeRequest> nodeRequests) {
+        if (!incident.getIncidentNodes().isEmpty()) {
+            incident.getIncidentNodes().clear();
+            incidentRepository.flush();
+        }
+
+        for (IncidentNodeRequest nodeRequest : nodeRequests) {
+            NetworkNode networkNode = findNetworkNodeByIdOrThrow(nodeRequest.getNetworkNodeId());
+
+            IncidentNode incidentNode = new IncidentNode();
+            incidentNode.setNetworkNode(networkNode);
+            incidentNode.setRole(nodeRequest.getRole());
+
+            incident.addIncidentNode(incidentNode);
+        }
+    }
+
+    private List<IncidentNodeRequest> mapCurrentNodesToRequests(List<IncidentNode> incidentNodes) {
+        return incidentNodes.stream()
+                .map(incidentNode -> {
+                    IncidentNodeRequest request = new IncidentNodeRequest();
+                    request.setNetworkNodeId(incidentNode.getNetworkNode().getId());
+                    request.setRole(incidentNode.getRole());
+                    return request;
+                })
+                .toList();
+    }
+
+    private boolean sameIncidentNodes(List<IncidentNodeRequest> requestedNodes, List<IncidentNode> currentNodes) {
+        if (requestedNodes.size() != currentNodes.size()) {
+            return false;
+        }
+
+        Map<Long, IncidentNodeRole> currentNodeMap = new LinkedHashMap<>();
+        for (IncidentNode currentNode : currentNodes) {
+            currentNodeMap.put(currentNode.getNetworkNode().getId(), currentNode.getRole());
+        }
+
+        for (IncidentNodeRequest requestedNode : requestedNodes) {
+            if (!Objects.equals(currentNodeMap.get(requestedNode.getNetworkNodeId()), requestedNode.getRole())) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private String normalizeNullableString(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
     private IncidentResponse mapToResponse(Incident incident) {
         IncidentResponse response = new IncidentResponse();
         response.setId(incident.getId());
@@ -611,10 +724,24 @@ public class IncidentService {
         response.setStatus(incident.getStatus());
         response.setPriority(incident.getPriority());
         response.setRegion(incident.getRegion());
+        response.setSourceAlarmType(incident.getSourceAlarmType());
+        response.setPossiblyPlanned(incident.getPossiblyPlanned());
+        response.setRootNodeId(incident.getRootNode() != null ? incident.getRootNode().getId() : null);
+        response.setNodes(incident.getIncidentNodes().stream()
+                .map(this::mapNodeToResponse)
+                .toList());
         response.setOpenedAt(incident.getOpenedAt());
         response.setAcknowledgedAt(incident.getAcknowledgedAt());
         response.setResolvedAt(incident.getResolvedAt());
         response.setClosedAt(incident.getClosedAt());
+        return response;
+    }
+
+    private IncidentNodeResponse mapNodeToResponse(IncidentNode incidentNode) {
+        IncidentNodeResponse response = new IncidentNodeResponse();
+        response.setId(incidentNode.getId());
+        response.setNetworkNodeId(incidentNode.getNetworkNode().getId());
+        response.setRole(incidentNode.getRole());
         return response;
     }
 

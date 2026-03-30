@@ -9,4 +9,6 @@ import java.util.Optional;
 public interface IncidentRepository extends JpaRepository<Incident, Long>, JpaSpecificationExecutor<Incident> {
 
     Optional<Incident> findByIncidentNumber(String incidentNumber);
+
+    boolean existsByIncidentNumberAndIdNot(String incidentNumber, Long id);
 }
