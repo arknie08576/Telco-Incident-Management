@@ -182,6 +182,21 @@ Aplikacja ma przygotowane podstawy pod centralizacje logow:
 - logi biznesowe dla create, update i lifecycle incidentow
 - logowanie bledow w `GlobalExceptionHandler`
 - profil `elk`, ktory wysyla logi JSON bezposrednio do Logstash po TCP
+- Spring Boot Actuator dla darmowych endpointow observability
+
+### Actuator
+
+Dostepne endpointy:
+- `GET /actuator/health`
+- `GET /actuator/health/liveness`
+- `GET /actuator/health/readiness`
+- `GET /actuator/info`
+- `GET /actuator/metrics`
+
+To jest celowo lekki, darmowy pakiet observability dobry do projektu studenckiego:
+- healthcheck pod lokalne uruchomienie i Docker
+- podstawowe metadane aplikacji
+- metryki runtime bez wchodzenia w platne funkcje platformowe
 
 ### Uruchomienie lokalnego stacka ELK
 
