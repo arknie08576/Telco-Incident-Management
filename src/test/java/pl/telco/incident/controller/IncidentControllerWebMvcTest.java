@@ -15,6 +15,7 @@ import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentActionRequest;
 import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
+import pl.telco.incident.dto.IncidentUpdateRequest;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.exception.BadRequestException;
@@ -126,6 +127,14 @@ class IncidentControllerWebMvcTest {
     }
 
     @Test
+    void getAllIncidentsShouldReturnBadRequestForInvalidResolvedFromFormat() throws Exception {
+        mockMvc.perform(get("/api/incidents")
+                        .param("resolvedFrom", "2026-03-29"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value '2026-03-29' for parameter 'resolvedFrom'"));
+    }
+
+    @Test
     void getIncidentByIdShouldMapResourceNotFoundException() throws Exception {
         incidentService.setGetIncidentByIdHandler(id -> {
             throw new ResourceNotFoundException("Incident not found: " + id);
@@ -177,6 +186,43 @@ class IncidentControllerWebMvcTest {
     }
 
     @Test
+    void updateIncidentShouldReturnValidationErrorsForInvalidBody() throws Exception {
+        String requestBody = """
+                {
+                  "title": "   ",
+                  "region": "",
+                  "sourceAlarmType": "   "
+                }
+                """;
+
+        mockMvc.perform(patch("/api/incidents/{id}", 30L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Validation failed"))
+                .andExpect(jsonPath("$.fieldErrors.title").value("title must not be blank"))
+                .andExpect(jsonPath("$.fieldErrors.region").value("region must not be blank"))
+                .andExpect(jsonPath("$.fieldErrors.sourceAlarmType").value("sourceAlarmType must not be blank"));
+    }
+
+    @Test
+    void updateIncidentShouldMapConflictException() throws Exception {
+        incidentService.setUpdateIncidentHandler((id, request) -> {
+            throw new ConflictException("Incident with number already exists: INC-700");
+        });
+
+        mockMvc.perform(patch("/api/incidents/{id}", 31L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentNumber": "INC-700"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Incident with number already exists: INC-700"));
+    }
+
+    @Test
     void closeIncidentShouldPassOptionalRequestBodyToService() throws Exception {
         IncidentResponse response = new IncidentResponse();
         response.setId(20L);
@@ -213,6 +259,8 @@ class IncidentControllerWebMvcTest {
                 request -> new IncidentResponse();
         private LongFunction<IncidentResponse> getIncidentByIdHandler =
                 id -> new IncidentResponse();
+        private BiFunction<Long, IncidentUpdateRequest, IncidentResponse> updateIncidentHandler =
+                (id, request) -> new IncidentResponse();
         private BiFunction<Long, IncidentActionRequest, IncidentResponse> acknowledgeIncidentHandler =
                 (id, request) -> new IncidentResponse();
         private BiFunction<Long, IncidentActionRequest, IncidentResponse> closeIncidentHandler =
@@ -228,6 +276,10 @@ class IncidentControllerWebMvcTest {
 
         void setGetIncidentByIdHandler(LongFunction<IncidentResponse> getIncidentByIdHandler) {
             this.getIncidentByIdHandler = getIncidentByIdHandler;
+        }
+
+        void setUpdateIncidentHandler(BiFunction<Long, IncidentUpdateRequest, IncidentResponse> updateIncidentHandler) {
+            this.updateIncidentHandler = updateIncidentHandler;
         }
 
         void setAcknowledgeIncidentHandler(BiFunction<Long, IncidentActionRequest, IncidentResponse> acknowledgeIncidentHandler) {
@@ -249,17 +301,33 @@ class IncidentControllerWebMvcTest {
         }
 
         @Override
+        public IncidentResponse updateIncident(Long id, IncidentUpdateRequest request) {
+            return updateIncidentHandler.apply(id, request);
+        }
+
+        @Override
         public Page<IncidentResponse> getAllIncidents(
                 int page,
                 int size,
                 String sortBy,
                 String direction,
                 IncidentPriority priority,
+                List<String> priorities,
                 String region,
                 Boolean possiblyPlanned,
                 IncidentStatus status,
+                List<String> statuses,
+                String incidentNumber,
+                String title,
+                String sourceAlarmType,
                 LocalDateTime openedFrom,
-                LocalDateTime openedTo
+                LocalDateTime openedTo,
+                LocalDateTime acknowledgedFrom,
+                LocalDateTime acknowledgedTo,
+                LocalDateTime resolvedFrom,
+                LocalDateTime resolvedTo,
+                LocalDateTime closedFrom,
+                LocalDateTime closedTo
         ) {
             return new PageImpl<>(List.of());
         }

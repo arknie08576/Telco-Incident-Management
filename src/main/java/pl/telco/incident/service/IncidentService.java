@@ -13,6 +13,7 @@ import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentNodeRequest;
 import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
+import pl.telco.incident.dto.IncidentUpdateRequest;
 import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.IncidentNode;
 import pl.telco.incident.entity.IncidentTimeline;
@@ -28,16 +29,29 @@ import pl.telco.incident.repository.IncidentTimelineRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasPossiblyPlanned;
-import static pl.telco.incident.repository.specification.IncidentSpecifications.hasPriority;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.hasPriorities;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasRegion;
-import static pl.telco.incident.repository.specification.IncidentSpecifications.hasStatus;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.hasSourceAlarmType;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.hasStatuses;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.incidentNumberContains;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.openedAtFrom;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.openedAtTo;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.titleContains;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.acknowledgedAtFrom;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.acknowledgedAtTo;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.resolvedAtFrom;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.resolvedAtTo;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.closedAtFrom;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.closedAtTo;
 
 @Service
 @RequiredArgsConstructor
@@ -49,9 +63,18 @@ public class IncidentService {
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "openedAt",
+            "acknowledgedAt",
+            "resolvedAt",
+            "closedAt",
             "incidentNumber",
             "priority",
             "title"
+    );
+
+    private static final Set<String> NULLABLE_TIMESTAMP_SORT_FIELDS = Set.of(
+            "acknowledgedAt",
+            "resolvedAt",
+            "closedAt"
     );
 
     @Transactional
@@ -105,30 +128,51 @@ public class IncidentService {
             String sortBy,
             String direction,
             IncidentPriority priority,
+            List<String> priorities,
             String region,
             Boolean possiblyPlanned,
             IncidentStatus status,
+            List<String> statuses,
+            String incidentNumber,
+            String title,
+            String sourceAlarmType,
             LocalDateTime openedFrom,
-            LocalDateTime openedTo
+            LocalDateTime openedTo,
+            LocalDateTime acknowledgedFrom,
+            LocalDateTime acknowledgedTo,
+            LocalDateTime resolvedFrom,
+            LocalDateTime resolvedTo,
+            LocalDateTime closedFrom,
+            LocalDateTime closedTo
     ) {
         validateSortBy(sortBy);
-        validateOpenedAtRange(openedFrom, openedTo);
+        validateDateRange("openedFrom", openedFrom, "openedTo", openedTo);
+        validateDateRange("acknowledgedFrom", acknowledgedFrom, "acknowledgedTo", acknowledgedTo);
+        validateDateRange("resolvedFrom", resolvedFrom, "resolvedTo", resolvedTo);
+        validateDateRange("closedFrom", closedFrom, "closedTo", closedTo);
 
+        Set<IncidentPriority> priorityFilters = mergePriorityFilters(priority, priorities);
+        Set<IncidentStatus> statusFilters = mergeStatusFilters(status, statuses);
         Sort.Direction sortDirection = parseSortDirection(direction);
-
-        Pageable pageable = PageRequest.of(
-                page,
-                size,
-                Sort.by(sortDirection, sortBy)
-        );
+        Pageable pageable = PageRequest.of(page, size);
 
         Specification<Incident> specification = Specification
-                .where(hasPriority(priority))
+                .where(hasPriorities(priorityFilters))
                 .and(hasRegion(region))
                 .and(hasPossiblyPlanned(possiblyPlanned))
-                .and(hasStatus(status))
+                .and(hasStatuses(statusFilters))
+                .and(incidentNumberContains(incidentNumber))
+                .and(titleContains(title))
+                .and(hasSourceAlarmType(sourceAlarmType))
                 .and(openedAtFrom(openedFrom))
-                .and(openedAtTo(openedTo));
+                .and(openedAtTo(openedTo))
+                .and(acknowledgedAtFrom(acknowledgedFrom))
+                .and(acknowledgedAtTo(acknowledgedTo))
+                .and(resolvedAtFrom(resolvedFrom))
+                .and(resolvedAtTo(resolvedTo))
+                .and(closedAtFrom(closedFrom))
+                .and(closedAtTo(closedTo))
+                .and(withSort(sortBy, sortDirection));
 
         return incidentRepository.findAll(specification, pageable)
                 .map(this::mapToResponse);
@@ -138,6 +182,67 @@ public class IncidentService {
     public IncidentResponse getIncidentById(Long id) {
         Incident incident = findIncidentByIdOrThrow(id);
         return mapToResponse(incident);
+    }
+
+    @Transactional
+    public IncidentResponse updateIncident(Long id, IncidentUpdateRequest request) {
+        Incident incident = findIncidentByIdOrThrow(id);
+
+        if (incident.getStatus() == IncidentStatus.CLOSED) {
+            throw new BadRequestException("Closed incidents cannot be edited");
+        }
+
+        List<String> changedFields = new ArrayList<>();
+
+        applyStringUpdate(
+                request.getIncidentNumber(),
+                incident.getIncidentNumber(),
+                this::validateIncidentNumberUniquenessForUpdate,
+                incident::setIncidentNumber,
+                "incidentNumber",
+                changedFields
+        );
+        applyStringUpdate(
+                request.getTitle(),
+                incident.getTitle(),
+                value -> { },
+                incident::setTitle,
+                "title",
+                changedFields
+        );
+        applyObjectUpdate(request.getPriority(), incident.getPriority(), incident::setPriority, "priority", changedFields);
+        applyStringUpdate(
+                request.getRegion(),
+                incident.getRegion(),
+                value -> { },
+                incident::setRegion,
+                "region",
+                changedFields
+        );
+        applyStringUpdate(
+                request.getSourceAlarmType(),
+                incident.getSourceAlarmType(),
+                value -> { },
+                incident::setSourceAlarmType,
+                "sourceAlarmType",
+                changedFields
+        );
+        applyObjectUpdate(
+                request.getPossiblyPlanned(),
+                incident.getPossiblyPlanned(),
+                incident::setPossiblyPlanned,
+                "possiblyPlanned",
+                changedFields
+        );
+
+        if (changedFields.isEmpty()) {
+            throw new BadRequestException("Patch request does not change incident");
+        }
+
+        Incident saved = incidentRepository.save(incident);
+        addTimelineEvent(saved, "UPDATED", buildUpdateMessage(changedFields));
+
+        return mapToResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -261,6 +366,13 @@ public class IncidentService {
         }
     }
 
+    private void validateIncidentNumberUniquenessForUpdate(String incidentNumber) {
+        incidentRepository.findByIncidentNumber(incidentNumber)
+                .ifPresent(existingIncident -> {
+                    throw new ConflictException("Incident with number already exists: " + incidentNumber);
+                });
+    }
+
     private void validateNodeUniqueness(IncidentCreateRequest request) {
         Set<Long> uniqueNodeIds = new HashSet<>();
 
@@ -287,6 +399,27 @@ public class IncidentService {
         }
     }
 
+    private Specification<Incident> withSort(String sortBy, Sort.Direction sortDirection) {
+        return (root, query, cb) -> {
+            if (query != null && !isCountQuery(query.getResultType())) {
+                if (NULLABLE_TIMESTAMP_SORT_FIELDS.contains(sortBy)) {
+                    query.orderBy(
+                            cb.asc(cb.selectCase().when(cb.isNull(root.get(sortBy)), 1).otherwise(0)),
+                            sortDirection.isAscending() ? cb.asc(root.get(sortBy)) : cb.desc(root.get(sortBy))
+                    );
+                } else {
+                    query.orderBy(sortDirection.isAscending() ? cb.asc(root.get(sortBy)) : cb.desc(root.get(sortBy)));
+                }
+            }
+
+            return cb.conjunction();
+        };
+    }
+
+    private boolean isCountQuery(Class<?> resultType) {
+        return Long.class.equals(resultType) || long.class.equals(resultType);
+    }
+
     private void validateRootNodeConsistency(IncidentCreateRequest request) {
         long rootCount = request.getNodes().stream()
                 .filter(node -> node.getRole() == IncidentNodeRole.ROOT)
@@ -307,10 +440,115 @@ public class IncidentService {
         }
     }
 
-    private void validateOpenedAtRange(LocalDateTime openedFrom, LocalDateTime openedTo) {
-        if (openedFrom != null && openedTo != null && openedFrom.isAfter(openedTo)) {
-            throw new BadRequestException("openedFrom must be earlier than or equal to openedTo");
+    private void validateDateRange(
+            String fromFieldName,
+            LocalDateTime from,
+            String toFieldName,
+            LocalDateTime to
+    ) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new BadRequestException(fromFieldName + " must be earlier than or equal to " + toFieldName);
         }
+    }
+
+    private Set<IncidentPriority> mergePriorityFilters(IncidentPriority priority, List<String> priorities) {
+        LinkedHashSet<IncidentPriority> merged = new LinkedHashSet<>();
+
+        if (priority != null) {
+            merged.add(priority);
+        }
+        merged.addAll(parseEnumFilters(priorities, IncidentPriority.class, "priorities"));
+
+        return merged;
+    }
+
+    private Set<IncidentStatus> mergeStatusFilters(IncidentStatus status, List<String> statuses) {
+        LinkedHashSet<IncidentStatus> merged = new LinkedHashSet<>();
+
+        if (status != null) {
+            merged.add(status);
+        }
+        merged.addAll(parseEnumFilters(statuses, IncidentStatus.class, "statuses"));
+
+        return merged;
+    }
+
+    private <E extends Enum<E>> Set<E> parseEnumFilters(
+            List<String> rawValues,
+            Class<E> enumType,
+            String parameterName
+    ) {
+        LinkedHashSet<E> parsedValues = new LinkedHashSet<>();
+
+        if (rawValues == null) {
+            return parsedValues;
+        }
+
+        for (String rawValue : rawValues) {
+            if (rawValue == null || rawValue.isBlank()) {
+                continue;
+            }
+
+            for (String token : rawValue.split(",")) {
+                String normalizedToken = token.trim();
+
+                if (normalizedToken.isEmpty()) {
+                    continue;
+                }
+
+                try {
+                    parsedValues.add(Enum.valueOf(enumType, normalizedToken.toUpperCase(Locale.ROOT)));
+                } catch (IllegalArgumentException ex) {
+                    throw new BadRequestException(
+                            "Invalid value '%s' for parameter '%s'".formatted(normalizedToken, parameterName)
+                    );
+                }
+            }
+        }
+
+        return parsedValues;
+    }
+
+    private void applyStringUpdate(
+            String requestedValue,
+            String currentValue,
+            java.util.function.Consumer<String> validator,
+            java.util.function.Consumer<String> updater,
+            String fieldName,
+            List<String> changedFields
+    ) {
+        if (requestedValue == null) {
+            return;
+        }
+
+        String normalizedValue = requestedValue.trim();
+
+        if (Objects.equals(normalizedValue, currentValue)) {
+            return;
+        }
+
+        validator.accept(normalizedValue);
+        updater.accept(normalizedValue);
+        changedFields.add(fieldName);
+    }
+
+    private <T> void applyObjectUpdate(
+            T requestedValue,
+            T currentValue,
+            java.util.function.Consumer<T> updater,
+            String fieldName,
+            List<String> changedFields
+    ) {
+        if (requestedValue == null || Objects.equals(requestedValue, currentValue)) {
+            return;
+        }
+
+        updater.accept(requestedValue);
+        changedFields.add(fieldName);
+    }
+
+    private String buildUpdateMessage(List<String> changedFields) {
+        return "Incident updated: " + String.join(", ", changedFields);
     }
 
     private IncidentResponse mapToResponse(Incident incident) {

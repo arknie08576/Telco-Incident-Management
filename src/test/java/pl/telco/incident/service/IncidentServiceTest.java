@@ -14,6 +14,7 @@ import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentNodeRequest;
 import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
+import pl.telco.incident.dto.IncidentUpdateRequest;
 import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.IncidentTimeline;
 import pl.telco.incident.entity.NetworkNode;
@@ -170,6 +171,89 @@ class IncidentServiceTest {
     }
 
     @Test
+    void updateIncidentShouldApplyChangedFieldsAndAddUpdatedTimelineEvent() {
+        Incident incident = buildIncident(150L, "INC-150", IncidentStatus.OPEN);
+        when(incidentRepository.findById(150L)).thenReturn(Optional.of(incident));
+        when(incidentRepository.findByIncidentNumber("INC-151")).thenReturn(Optional.empty());
+
+        IncidentUpdateRequest request = new IncidentUpdateRequest();
+        request.setIncidentNumber("INC-151");
+        request.setTitle("Updated incident");
+        request.setPriority(IncidentPriority.CRITICAL);
+        request.setRegion("SLASKIE");
+        request.setSourceAlarmType("POWER");
+        request.setPossiblyPlanned(true);
+
+        IncidentResponse response = incidentService.updateIncident(150L, request);
+
+        ArgumentCaptor<IncidentTimeline> timelineCaptor = ArgumentCaptor.forClass(IncidentTimeline.class);
+        verify(incidentTimelineRepository).save(timelineCaptor.capture());
+
+        assertThat(response.getIncidentNumber()).isEqualTo("INC-151");
+        assertThat(response.getTitle()).isEqualTo("Updated incident");
+        assertThat(response.getPriority()).isEqualTo(IncidentPriority.CRITICAL);
+        assertThat(response.getRegion()).isEqualTo("SLASKIE");
+        assertThat(incident.getSourceAlarmType()).isEqualTo("POWER");
+        assertThat(incident.getPossiblyPlanned()).isTrue();
+        assertThat(timelineCaptor.getValue().getEventType()).isEqualTo("UPDATED");
+        assertThat(timelineCaptor.getValue().getMessage())
+                .isEqualTo("Incident updated: incidentNumber, title, priority, region, sourceAlarmType, possiblyPlanned");
+    }
+
+    @Test
+    void updateIncidentShouldRejectNoOpPatch() {
+        Incident incident = buildIncident(151L, "INC-151", IncidentStatus.OPEN);
+        when(incidentRepository.findById(151L)).thenReturn(Optional.of(incident));
+
+        IncidentUpdateRequest request = new IncidentUpdateRequest();
+        request.setIncidentNumber("INC-151");
+        request.setTitle("Test incident");
+        request.setPriority(IncidentPriority.HIGH);
+        request.setRegion("MAZOWIECKIE");
+        request.setSourceAlarmType("TEST");
+        request.setPossiblyPlanned(false);
+
+        assertThatThrownBy(() -> incidentService.updateIncident(151L, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Patch request does not change incident");
+
+        verify(incidentRepository, never()).save(any(Incident.class));
+        verify(incidentTimelineRepository, never()).save(any(IncidentTimeline.class));
+    }
+
+    @Test
+    void updateIncidentShouldRejectClosedIncident() {
+        Incident incident = buildIncident(152L, "INC-152", IncidentStatus.CLOSED);
+        when(incidentRepository.findById(152L)).thenReturn(Optional.of(incident));
+
+        IncidentUpdateRequest request = new IncidentUpdateRequest();
+        request.setTitle("Should fail");
+
+        assertThatThrownBy(() -> incidentService.updateIncident(152L, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Closed incidents cannot be edited");
+
+        verify(incidentRepository, never()).save(any(Incident.class));
+    }
+
+    @Test
+    void updateIncidentShouldRejectDuplicateIncidentNumber() {
+        Incident incident = buildIncident(153L, "INC-153", IncidentStatus.OPEN);
+        when(incidentRepository.findById(153L)).thenReturn(Optional.of(incident));
+        when(incidentRepository.findByIncidentNumber("INC-154"))
+                .thenReturn(Optional.of(Incident.builder().id(154L).incidentNumber("INC-154").build()));
+
+        IncidentUpdateRequest request = new IncidentUpdateRequest();
+        request.setIncidentNumber("INC-154");
+
+        assertThatThrownBy(() -> incidentService.updateIncident(153L, request))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage("Incident with number already exists: INC-154");
+
+        verify(incidentRepository, never()).save(any(Incident.class));
+    }
+
+    @Test
     void acknowledgeIncidentShouldUpdateStatusTimestampAndDefaultTimelineMessage() {
         Incident incident = buildIncident(200L, "INC-200", IncidentStatus.OPEN);
         when(incidentRepository.findById(200L)).thenReturn(Optional.of(incident));
@@ -225,6 +309,17 @@ class IncidentServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 null
         )).isInstanceOf(BadRequestException.class)
                 .hasMessage("Unsupported sortBy value: createdAt");
@@ -241,10 +336,49 @@ class IncidentServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 LocalDateTime.of(2026, 3, 30, 10, 0),
-                LocalDateTime.of(2026, 3, 29, 10, 0)
+                LocalDateTime.of(2026, 3, 29, 10, 0),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
         )).isInstanceOf(BadRequestException.class)
                 .hasMessage("openedFrom must be earlier than or equal to openedTo");
+    }
+
+    @Test
+    void getAllIncidentsShouldRejectAcknowledgedAtRangeWhenFromIsAfterTo() {
+        assertThatThrownBy(() -> incidentService.getAllIncidents(
+                0,
+                10,
+                "openedAt",
+                "desc",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                LocalDateTime.of(2026, 3, 30, 10, 0),
+                LocalDateTime.of(2026, 3, 29, 10, 0),
+                null,
+                null,
+                null,
+                null
+        )).isInstanceOf(BadRequestException.class)
+                .hasMessage("acknowledgedFrom must be earlier than or equal to acknowledgedTo");
     }
 
     @Test
@@ -265,16 +399,55 @@ class IncidentServiceTest {
                 "incidentNumber",
                 "asc",
                 IncidentPriority.CRITICAL,
+                List.of("HIGH", "CRITICAL"),
                 "pomorskie",
                 false,
                 IncidentStatus.OPEN,
+                List.of("OPEN", "RESOLVED"),
+                "INC-203",
+                "test",
+                "TEST",
                 LocalDateTime.of(2026, 3, 29, 0, 0),
-                LocalDateTime.of(2026, 3, 29, 23, 59)
+                LocalDateTime.of(2026, 3, 29, 23, 59),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
         );
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().getFirst().getIncidentNumber()).isEqualTo("INC-203");
         assertThat(result.getContent().getFirst().getPriority()).isEqualTo(IncidentPriority.CRITICAL);
+    }
+
+    @Test
+    void getAllIncidentsShouldRejectInvalidMultiValuePriorityFilter() {
+        assertThatThrownBy(() -> incidentService.getAllIncidents(
+                0,
+                10,
+                "openedAt",
+                "desc",
+                null,
+                List.of("URGENT"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        )).isInstanceOf(BadRequestException.class)
+                .hasMessage("Invalid value 'URGENT' for parameter 'priorities'");
     }
 
     @Test

@@ -22,6 +22,7 @@ import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentPageResponse;
 import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
+import pl.telco.incident.dto.IncidentUpdateRequest;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.service.IncidentService;
@@ -83,10 +84,41 @@ public class IncidentController {
         return incidentService.getIncidentById(id);
     }
 
+    @PatchMapping("/{id}")
+    @Operation(
+            summary = "Update incident",
+            description = "Partially updates editable incident fields. Lifecycle status and incident nodes are not changed by this endpoint."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Incident updated"),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Validation error, empty patch or editing not allowed for current incident state",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Incident not found",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Incident number already exists",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            )
+    })
+    public IncidentResponse updateIncident(
+            @Parameter(description = "Incident identifier", example = "42")
+            @PathVariable("id") Long id,
+            @Valid @RequestBody IncidentUpdateRequest request
+    ) {
+        return incidentService.updateIncident(id, request);
+    }
+
     @GetMapping
     @Operation(
             summary = "List incidents",
-            description = "Returns a paginated incident list with optional filters for priority, region, planned work and status."
+            description = "Returns a paginated incident list with optional filters for lifecycle, text fields and date ranges."
     )
     @ApiResponses({
             @ApiResponse(
@@ -105,24 +137,52 @@ public class IncidentController {
             @RequestParam(name = "page", defaultValue = "0") @Min(0) int page,
             @Parameter(description = "Page size, from 1 to 100", example = "10")
             @RequestParam(name = "size", defaultValue = "10") @Min(1) @Max(100) int size,
-            @Parameter(description = "Supported values: openedAt, incidentNumber, priority, title", example = "openedAt")
+            @Parameter(description = "Supported values: openedAt, acknowledgedAt, resolvedAt, closedAt, incidentNumber, priority, title", example = "openedAt")
             @RequestParam(name = "sortBy", defaultValue = "openedAt") String sortBy,
             @Parameter(description = "Sort direction", example = "desc")
             @RequestParam(name = "direction", defaultValue = "desc") String direction,
-            @Parameter(description = "Filter by priority", example = "HIGH")
+            @Parameter(description = "Filter by a single priority", example = "HIGH")
             @RequestParam(name = "priority", required = false) IncidentPriority priority,
+            @Parameter(description = "Filter by multiple priorities. Supports repeated params or comma-separated values.", example = "HIGH,CRITICAL")
+            @RequestParam(name = "priorities", required = false) List<String> priorities,
             @Parameter(description = "Case-insensitive region filter", example = "MAZOWIECKIE")
             @RequestParam(name = "region", required = false) String region,
             @Parameter(description = "Filter incidents that may be planned work", example = "false")
             @RequestParam(name = "possiblyPlanned", required = false) Boolean possiblyPlanned,
-            @Parameter(description = "Filter by lifecycle status", example = "OPEN")
+            @Parameter(description = "Filter by a single lifecycle status", example = "OPEN")
             @RequestParam(name = "status", required = false) IncidentStatus status,
+            @Parameter(description = "Filter by multiple lifecycle statuses. Supports repeated params or comma-separated values.", example = "OPEN,ACKNOWLEDGED")
+            @RequestParam(name = "statuses", required = false) List<String> statuses,
+            @Parameter(description = "Case-insensitive partial match on incident number", example = "INC-10")
+            @RequestParam(name = "incidentNumber", required = false) String incidentNumber,
+            @Parameter(description = "Case-insensitive partial match on title", example = "router failure")
+            @RequestParam(name = "title", required = false) String title,
+            @Parameter(description = "Case-insensitive exact match on source alarm type", example = "HARDWARE")
+            @RequestParam(name = "sourceAlarmType", required = false) String sourceAlarmType,
             @Parameter(description = "Include incidents opened at or after this timestamp.", example = "2026-03-29T07:00:00")
             @RequestParam(name = "openedFrom", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime openedFrom,
             @Parameter(description = "Include incidents opened at or before this timestamp.", example = "2026-03-29T12:00:00")
             @RequestParam(name = "openedTo", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime openedTo
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime openedTo,
+            @Parameter(description = "Include incidents acknowledged at or after this timestamp.", example = "2026-03-29T08:00:00")
+            @RequestParam(name = "acknowledgedFrom", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime acknowledgedFrom,
+            @Parameter(description = "Include incidents acknowledged at or before this timestamp.", example = "2026-03-29T09:00:00")
+            @RequestParam(name = "acknowledgedTo", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime acknowledgedTo,
+            @Parameter(description = "Include incidents resolved at or after this timestamp.", example = "2026-03-29T09:00:00")
+            @RequestParam(name = "resolvedFrom", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime resolvedFrom,
+            @Parameter(description = "Include incidents resolved at or before this timestamp.", example = "2026-03-29T10:00:00")
+            @RequestParam(name = "resolvedTo", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime resolvedTo,
+            @Parameter(description = "Include incidents closed at or after this timestamp.", example = "2026-03-29T10:00:00")
+            @RequestParam(name = "closedFrom", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime closedFrom,
+            @Parameter(description = "Include incidents closed at or before this timestamp.", example = "2026-03-29T11:00:00")
+            @RequestParam(name = "closedTo", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime closedTo
     ) {
         Page<IncidentResponse> incidentPage = incidentService.getAllIncidents(
                 page,
@@ -130,11 +190,22 @@ public class IncidentController {
                 sortBy,
                 direction,
                 priority,
+                priorities,
                 region,
                 possiblyPlanned,
                 status,
+                statuses,
+                incidentNumber,
+                title,
+                sourceAlarmType,
                 openedFrom,
-                openedTo
+                openedTo,
+                acknowledgedFrom,
+                acknowledgedTo,
+                resolvedFrom,
+                resolvedTo,
+                closedFrom,
+                closedTo
         );
 
         return IncidentPageResponse.from(incidentPage);

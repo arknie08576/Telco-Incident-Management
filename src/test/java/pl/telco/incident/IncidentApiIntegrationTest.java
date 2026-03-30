@@ -258,6 +258,98 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void updateIncidentShouldPatchEditableFieldsAndAddTimelineEvent() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-GDN-01", NodeType.ROUTER, "POMORSKIE");
+        Incident incident = saveIncident("INC-102D", "Original incident", IncidentStatus.OPEN, IncidentPriority.HIGH, "POMORSKIE", rootNode);
+
+        mockMvc.perform(patch("/api/incidents/{id}", incident.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentNumber": "INC-102E",
+                                  "title": "Updated incident title",
+                                  "priority": "CRITICAL",
+                                  "region": "SLASKIE",
+                                  "sourceAlarmType": "POWER",
+                                  "possiblyPlanned": true
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.incidentNumber").value("INC-102E"))
+                .andExpect(jsonPath("$.title").value("Updated incident title"))
+                .andExpect(jsonPath("$.priority").value("CRITICAL"))
+                .andExpect(jsonPath("$.region").value("SLASKIE"));
+
+        Incident updatedIncident = incidentRepository.findById(incident.getId()).orElseThrow();
+        List<IncidentTimeline> timeline = incidentTimelineRepository.findByIncidentIdOrderByCreatedAtAsc(incident.getId());
+
+        assertThat(updatedIncident.getIncidentNumber()).isEqualTo("INC-102E");
+        assertThat(updatedIncident.getTitle()).isEqualTo("Updated incident title");
+        assertThat(updatedIncident.getPriority()).isEqualTo(IncidentPriority.CRITICAL);
+        assertThat(updatedIncident.getRegion()).isEqualTo("SLASKIE");
+        assertThat(updatedIncident.getSourceAlarmType()).isEqualTo("POWER");
+        assertThat(updatedIncident.getPossiblyPlanned()).isTrue();
+        assertThat(timeline).hasSize(1);
+        assertThat(timeline.getFirst().getEventType()).isEqualTo("UPDATED");
+        assertThat(timeline.getFirst().getMessage())
+                .isEqualTo("Incident updated: incidentNumber, title, priority, region, sourceAlarmType, possiblyPlanned");
+    }
+
+    @Test
+    void updateIncidentShouldReturnConflictForDuplicateIncidentNumber() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-LOD-01", NodeType.ROUTER, "LODZKIE");
+        saveIncident("INC-110", "Existing incident", IncidentStatus.OPEN, IncidentPriority.HIGH, "LODZKIE", rootNode);
+        Incident incidentToUpdate = saveIncident("INC-111", "Editable incident", IncidentStatus.OPEN, IncidentPriority.MEDIUM, "LODZKIE", rootNode);
+
+        mockMvc.perform(patch("/api/incidents/{id}", incidentToUpdate.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentNumber": "INC-110"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Incident with number already exists: INC-110"));
+    }
+
+    @Test
+    void updateIncidentShouldReturnBadRequestForNoOpPatch() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-SZC-01", NodeType.ROUTER, "ZACHODNIOPOMORSKIE");
+        Incident incident = saveIncident("INC-112", "No-op incident", IncidentStatus.OPEN, IncidentPriority.HIGH, "ZACHODNIOPOMORSKIE", rootNode);
+
+        mockMvc.perform(patch("/api/incidents/{id}", incident.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentNumber": "INC-112",
+                                  "title": "No-op incident",
+                                  "priority": "HIGH",
+                                  "region": "ZACHODNIOPOMORSKIE",
+                                  "sourceAlarmType": "TEST",
+                                  "possiblyPlanned": false
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Patch request does not change incident"));
+    }
+
+    @Test
+    void updateIncidentShouldRejectClosedIncident() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-WRO-01", NodeType.ROUTER, "DOLNOSLASKIE");
+        Incident incident = saveIncident("INC-113", "Closed incident", IncidentStatus.CLOSED, IncidentPriority.HIGH, "DOLNOSLASKIE", rootNode);
+
+        mockMvc.perform(patch("/api/incidents/{id}", incident.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Should not update"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Closed incidents cannot be edited"));
+    }
+
+    @Test
     void lifecycleEndpointsShouldUpdateStatusTimestampsAndTimelineMessages() throws Exception {
         NetworkNode rootNode = saveNode("CORE-SBC-WAW-01", NodeType.SBC, "SLASKIE");
         NetworkNode affectedNode = saveNode("RAN-GNB-KAT-01", NodeType.G_NODE_B, "SLASKIE");
@@ -428,6 +520,151 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void getAllIncidentsShouldFilterByIncidentNumberTitleSourceAlarmTypeAndLifecycleRanges() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-LUB-01", NodeType.ROUTER, "LUBELSKIE");
+
+        saveIncident(
+                "INC-701",
+                "Router failure in Lublin",
+                IncidentStatus.CLOSED,
+                IncidentPriority.CRITICAL,
+                "LUBELSKIE",
+                rootNode,
+                "HARDWARE",
+                false,
+                LocalDateTime.of(2026, 3, 29, 7, 0),
+                LocalDateTime.of(2026, 3, 29, 8, 0),
+                LocalDateTime.of(2026, 3, 29, 9, 0),
+                LocalDateTime.of(2026, 3, 29, 10, 0)
+        );
+        saveIncident(
+                "INC-702",
+                "Router failure in Krakow",
+                IncidentStatus.CLOSED,
+                IncidentPriority.CRITICAL,
+                "MALOPOLSKIE",
+                rootNode,
+                "POWER",
+                false,
+                LocalDateTime.of(2026, 3, 29, 7, 0),
+                LocalDateTime.of(2026, 3, 29, 8, 0),
+                LocalDateTime.of(2026, 3, 29, 9, 0),
+                LocalDateTime.of(2026, 3, 29, 10, 0)
+        );
+        saveIncident(
+                "NOPE-703",
+                "Router failure in Lublin",
+                IncidentStatus.CLOSED,
+                IncidentPriority.CRITICAL,
+                "LUBELSKIE",
+                rootNode,
+                "HARDWARE",
+                false,
+                LocalDateTime.of(2026, 3, 29, 7, 0),
+                LocalDateTime.of(2026, 3, 29, 11, 0),
+                LocalDateTime.of(2026, 3, 29, 12, 0),
+                LocalDateTime.of(2026, 3, 29, 13, 0)
+        );
+
+        mockMvc.perform(get("/api/incidents")
+                        .param("incidentNumber", "inc-70")
+                        .param("title", "lublin")
+                        .param("sourceAlarmType", "hardware")
+                        .param("acknowledgedFrom", "2026-03-29T07:30:00")
+                        .param("acknowledgedTo", "2026-03-29T08:30:00")
+                        .param("resolvedFrom", "2026-03-29T08:30:00")
+                        .param("resolvedTo", "2026-03-29T09:30:00")
+                        .param("closedFrom", "2026-03-29T09:30:00")
+                        .param("closedTo", "2026-03-29T10:30:00")
+                        .param("sortBy", "incidentNumber")
+                        .param("direction", "asc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].incidentNumber").value("INC-701"));
+    }
+
+    @Test
+    void getAllIncidentsShouldFilterByMultipleStatusesPrioritiesAndSortByClosedAt() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-BIA-01", NodeType.ROUTER, "PODLASKIE");
+
+        saveIncident(
+                "INC-801",
+                "First closed",
+                IncidentStatus.CLOSED,
+                IncidentPriority.CRITICAL,
+                "PODLASKIE",
+                rootNode,
+                "HARDWARE",
+                false,
+                LocalDateTime.of(2026, 3, 29, 7, 0),
+                LocalDateTime.of(2026, 3, 29, 8, 0),
+                LocalDateTime.of(2026, 3, 29, 9, 0),
+                LocalDateTime.of(2026, 3, 29, 10, 0)
+        );
+        saveIncident(
+                "INC-802",
+                "Second resolved",
+                IncidentStatus.RESOLVED,
+                IncidentPriority.HIGH,
+                "PODLASKIE",
+                rootNode,
+                "POWER",
+                false,
+                LocalDateTime.of(2026, 3, 29, 7, 0),
+                LocalDateTime.of(2026, 3, 29, 8, 0),
+                LocalDateTime.of(2026, 3, 29, 9, 30),
+                null
+        );
+        saveIncident(
+                "INC-803",
+                "Third closed later",
+                IncidentStatus.CLOSED,
+                IncidentPriority.CRITICAL,
+                "PODLASKIE",
+                rootNode,
+                "POWER",
+                false,
+                LocalDateTime.of(2026, 3, 29, 7, 0),
+                LocalDateTime.of(2026, 3, 29, 8, 0),
+                LocalDateTime.of(2026, 3, 29, 10, 0),
+                LocalDateTime.of(2026, 3, 29, 11, 0)
+        );
+        saveIncident(
+                "INC-804",
+                "Filtered by priority",
+                IncidentStatus.CLOSED,
+                IncidentPriority.LOW,
+                "PODLASKIE",
+                rootNode,
+                "POWER",
+                false,
+                LocalDateTime.of(2026, 3, 29, 7, 0),
+                LocalDateTime.of(2026, 3, 29, 8, 0),
+                LocalDateTime.of(2026, 3, 29, 10, 0),
+                LocalDateTime.of(2026, 3, 29, 12, 0)
+        );
+
+        mockMvc.perform(get("/api/incidents")
+                        .param("statuses", "CLOSED,RESOLVED")
+                        .param("priorities", "CRITICAL,HIGH")
+                        .param("sortBy", "closedAt")
+                        .param("direction", "desc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(3))
+                .andExpect(jsonPath("$.content[0].incidentNumber").value("INC-803"))
+                .andExpect(jsonPath("$.content[1].incidentNumber").value("INC-801"))
+                .andExpect(jsonPath("$.content[2].incidentNumber").value("INC-802"));
+    }
+
+    @Test
+    void getAllIncidentsShouldReturnBadRequestForInvalidMultiValueStatusFilter() throws Exception {
+        mockMvc.perform(get("/api/incidents")
+                        .param("statuses", "OPEN,INVALID"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value 'INVALID' for parameter 'statuses'"));
+    }
+
+    @Test
     void getAllIncidentsShouldReturnBadRequestForUnsupportedSortBy() throws Exception {
         mockMvc.perform(get("/api/incidents")
                         .param("sortBy", "createdAt"))
@@ -476,6 +713,15 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
                         .param("openedTo", "2026-03-29T08:00:00"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("openedFrom must be earlier than or equal to openedTo"));
+    }
+
+    @Test
+    void getAllIncidentsShouldReturnBadRequestWhenClosedFromIsAfterClosedTo() throws Exception {
+        mockMvc.perform(get("/api/incidents")
+                        .param("closedFrom", "2026-03-29T12:00:00")
+                        .param("closedTo", "2026-03-29T08:00:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("closedFrom must be earlier than or equal to closedTo"));
     }
 
     private Long createIncidentThroughApi(NetworkNode rootNode, NetworkNode affectedNode, String incidentNumber) throws Exception {
@@ -531,7 +777,26 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
             String region,
             NetworkNode rootNode
     ) {
-        return saveIncident(incidentNumber, title, status, priority, region, rootNode, LocalDateTime.now().minusHours(2));
+        return saveIncident(
+                incidentNumber,
+                title,
+                status,
+                priority,
+                region,
+                rootNode,
+                "TEST",
+                false,
+                LocalDateTime.now().minusHours(2),
+                status == IncidentStatus.ACKNOWLEDGED || status == IncidentStatus.RESOLVED || status == IncidentStatus.CLOSED
+                        ? LocalDateTime.now().minusHours(1)
+                        : null,
+                status == IncidentStatus.RESOLVED || status == IncidentStatus.CLOSED
+                        ? LocalDateTime.now()
+                        : null,
+                status == IncidentStatus.CLOSED
+                        ? LocalDateTime.now().plusHours(1)
+                        : null
+        );
     }
 
     private Incident saveIncident(
@@ -543,25 +808,55 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
             NetworkNode rootNode,
             LocalDateTime openedAt
     ) {
+        return saveIncident(
+                incidentNumber,
+                title,
+                status,
+                priority,
+                region,
+                rootNode,
+                "TEST",
+                false,
+                openedAt,
+                status == IncidentStatus.ACKNOWLEDGED || status == IncidentStatus.RESOLVED || status == IncidentStatus.CLOSED
+                        ? openedAt.plusHours(1)
+                        : null,
+                status == IncidentStatus.RESOLVED || status == IncidentStatus.CLOSED
+                        ? openedAt.plusHours(2)
+                        : null,
+                status == IncidentStatus.CLOSED
+                        ? openedAt.plusHours(3)
+                        : null
+        );
+    }
+
+    private Incident saveIncident(
+            String incidentNumber,
+            String title,
+            IncidentStatus status,
+            IncidentPriority priority,
+            String region,
+            NetworkNode rootNode,
+            String sourceAlarmType,
+            Boolean possiblyPlanned,
+            LocalDateTime openedAt,
+            LocalDateTime acknowledgedAt,
+            LocalDateTime resolvedAt,
+            LocalDateTime closedAt
+    ) {
         Incident incident = Incident.builder()
                 .incidentNumber(incidentNumber)
                 .title(title)
                 .status(status)
                 .priority(priority)
                 .region(region)
-                .sourceAlarmType("TEST")
-                .possiblyPlanned(false)
+                .sourceAlarmType(sourceAlarmType)
+                .possiblyPlanned(possiblyPlanned)
                 .rootNode(rootNode)
                 .openedAt(openedAt)
-                .acknowledgedAt(status == IncidentStatus.ACKNOWLEDGED || status == IncidentStatus.RESOLVED || status == IncidentStatus.CLOSED
-                        ? openedAt.plusHours(1)
-                        : null)
-                .resolvedAt(status == IncidentStatus.RESOLVED || status == IncidentStatus.CLOSED
-                        ? openedAt.plusHours(2)
-                        : null)
-                .closedAt(status == IncidentStatus.CLOSED
-                        ? openedAt.plusHours(3)
-                        : null)
+                .acknowledgedAt(acknowledgedAt)
+                .resolvedAt(resolvedAt)
+                .closedAt(closedAt)
                 .build();
 
         IncidentNode rootIncidentNode = new IncidentNode();
