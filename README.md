@@ -149,6 +149,21 @@ Backend w kontenerze:
 - wysyla logi do `logstash`
 - uruchamia Flyway przy starcie
 
+Jesli lokalnie masz juz zajete porty, mozesz nadpisac mapowanie bez edycji pliku:
+
+```powershell
+$env:POSTGRES_PORT=55432
+docker compose up -d --build
+```
+
+Analogicznie mozna nadpisac:
+- `BACKEND_PORT`
+- `POSTGRES_PORT`
+- `ELASTICSEARCH_PORT`
+- `KIBANA_PORT`
+- `LOGSTASH_PORT`
+- `LOGSTASH_MONITORING_PORT`
+
 Zatrzymanie stacka:
 
 ```powershell
