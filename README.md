@@ -6,6 +6,7 @@ Projekt koncentruje sie obecnie na domenie `incident`, ale ma juz przygotowane f
 - korelacje z `network_node`
 - integracje z `alarm_event`
 - awareness wzgledem `maintenance_window`
+- jawna edycje wszystkich tabel domenowych wystawionych przez REST API
 
 ## Zakres projektu
 
@@ -16,6 +17,13 @@ Aktualnie zaimplementowany i przetestowany backend incidentow obejmuje:
 - czesciowa edycje pol biznesowych
 - lifecycle incidentu
 - timeline zdarzen
+- CRUD dla `network_node`
+- CRUD dla `maintenance_window`
+- CRUD dla `alarm_event`
+- jawny CRUD dla tabel:
+  - `incident_node`
+  - `maintenance_node`
+  - `incident_timeline`
 - OpenAPI / Swagger UI
 - stabilny DTO response dla paginacji
 - global exception handling
@@ -26,10 +34,44 @@ Obslugiwane endpointy:
 - `GET /api/incidents`
 - `GET /api/incidents/{id}`
 - `PATCH /api/incidents/{id}`
+- `DELETE /api/incidents/{id}`
 - `PATCH /api/incidents/{id}/acknowledge`
 - `PATCH /api/incidents/{id}/resolve`
 - `PATCH /api/incidents/{id}/close`
 - `GET /api/incidents/{id}/timeline`
+- `POST /api/incidents/{id}/timeline`
+- `PUT /api/incidents/{id}/timeline/{timelineId}`
+- `DELETE /api/incidents/{id}/timeline/{timelineId}`
+- `GET /api/network-nodes`
+- `GET /api/network-nodes/{id}`
+- `POST /api/network-nodes`
+- `PUT /api/network-nodes/{id}`
+- `DELETE /api/network-nodes/{id}`
+- `GET /api/maintenance-windows`
+- `GET /api/maintenance-windows/{id}`
+- `POST /api/maintenance-windows`
+- `PUT /api/maintenance-windows/{id}`
+- `DELETE /api/maintenance-windows/{id}`
+- `GET /api/alarm-events`
+- `GET /api/alarm-events/{id}`
+- `POST /api/alarm-events`
+- `PUT /api/alarm-events/{id}`
+- `DELETE /api/alarm-events/{id}`
+- `GET /api/incident-nodes`
+- `GET /api/incident-nodes/{id}`
+- `POST /api/incident-nodes`
+- `PUT /api/incident-nodes/{id}`
+- `DELETE /api/incident-nodes/{id}`
+- `GET /api/maintenance-nodes`
+- `GET /api/maintenance-nodes/{id}`
+- `POST /api/maintenance-nodes`
+- `PUT /api/maintenance-nodes/{id}`
+- `DELETE /api/maintenance-nodes/{id}`
+- `GET /api/incident-timeline`
+- `GET /api/incident-timeline/{id}`
+- `POST /api/incident-timeline`
+- `PUT /api/incident-timeline/{id}`
+- `DELETE /api/incident-timeline/{id}`
 
 ## Stack
 
@@ -453,16 +495,14 @@ Endpoint wspiera partial update pol biznesowych:
 - `region`
 - `sourceAlarmType`
 - `possiblyPlanned`
-
-Celowo nie wspiera:
-- zmiany statusu
-- zmiany `rootNodeId`
-- zmiany listy `nodes`
+- `rootNodeId`
+- `nodes`
 
 Reguly:
 - incident `CLOSED` nie moze byc edytowany
 - pusty albo no-op patch zwraca `400`
 - zmiana `incidentNumber` pilnuje unikalnosci
+- przy zmianie `rootNodeId` i `nodes` backend pilnuje jednej roli `ROOT`, braku duplikatow i zgodnosci `rootNodeId`
 - udany update dopisuje event `UPDATED` do timeline
 
 Przykladowy request:
@@ -494,6 +534,30 @@ Body moze zawierac opcjonalna notatke:
 `GET /api/incidents/{id}/timeline`
 
 Zwraca eventy w kolejnosci rosnacej po `createdAt`.
+
+Scoped timeline API wspiera tez:
+- `POST /api/incidents/{id}/timeline`
+- `PUT /api/incidents/{id}/timeline/{timelineId}`
+- `DELETE /api/incidents/{id}/timeline/{timelineId}`
+
+## Reference Data API
+
+Backend wystawia juz pelny CRUD dla glownych danych referencyjnych:
+- `network_node` przez `/api/network-nodes`
+- `maintenance_window` przez `/api/maintenance-windows`
+- `alarm_event` przez `/api/alarm-events`
+
+## Direct Table APIs
+
+Zgodnie z modelem bazy dostepne sa tez jawne zasoby dla tabel powiazan i timeline:
+- `incident_node` przez `/api/incident-nodes`
+- `maintenance_node` przez `/api/maintenance-nodes`
+- `incident_timeline` przez `/api/incident-timeline`
+
+Praktyczna uwaga:
+- `incident_node` ma dodatkowe reguly domenowe, zeby bezposrednia edycja nie zepsula spojnosc incidentu
+- bezposrednio nie da sie usunac ani zdemotowac jedynego `ROOT` node'a incydentu
+- zmiana relacji `incident_node` nadal utrzymuje zgodnosc z `incident.rootNode`
 
 ## Incident listing
 
@@ -653,6 +717,7 @@ Zakres testow:
 - WebMvc testy kontrolera i exception handling
 - integracyjne testy API na PostgreSQL przez Testcontainers
 - testy OpenAPI
+- integracyjne testy CRUD dla reference data i direct table APIs
 
 Testcontainers:
 - wymagaja dostepnego Dockera
@@ -676,7 +741,7 @@ Profil testowy:
 ## Aktualny status
 
 Backend incidentow ma juz sensowny pion end-to-end:
-- CRUD-lite: create, get, list, partial update
+- pelny backend CRUD dla wszystkich tabel domenowych i relacyjnych
 - lifecycle z note'ami i timestampami
 - timeline
 - dokumentacje OpenAPI

@@ -106,6 +106,133 @@ class ReferenceDataApiIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void incidentNodeDirectCrudShouldWork() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-POZ-01", NodeType.ROUTER, "WIELKOPOLSKIE");
+        NetworkNode firstAffectedNode = saveNode("RAN-GNB-POZ-01", NodeType.G_NODE_B, "WIELKOPOLSKIE");
+        NetworkNode secondAffectedNode = saveNode("RAN-GNB-POZ-02", NodeType.G_NODE_B, "WIELKOPOLSKIE");
+
+        long incidentId = createIncidentWithSingleRoot(rootNode.getId(), "INC-NODE-1");
+
+        String createResponse = mockMvc.perform(post("/api/incident-nodes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentId": %d,
+                                  "networkNodeId": %d,
+                                  "role": "AFFECTED"
+                                }
+                                """.formatted(incidentId, firstAffectedNode.getId())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.incidentId").value(incidentId))
+                .andExpect(jsonPath("$.networkNodeId").value(firstAffectedNode.getId()))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long incidentNodeId = readId(createResponse);
+
+        mockMvc.perform(get("/api/incident-nodes/{id}", incidentNodeId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("AFFECTED"));
+
+        mockMvc.perform(put("/api/incident-nodes/{id}", incidentNodeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentId": %d,
+                                  "networkNodeId": %d,
+                                  "role": "AFFECTED"
+                                }
+                                """.formatted(incidentId, secondAffectedNode.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.networkNodeId").value(secondAffectedNode.getId()));
+
+        mockMvc.perform(delete("/api/incident-nodes/{id}", incidentNodeId))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void incidentNodeDirectRootUpdateShouldUpdateIncidentRoot() throws Exception {
+        NetworkNode firstRootNode = saveNode("CORE-RTR-GDA-01", NodeType.ROUTER, "POMORSKIE");
+        NetworkNode secondRootNode = saveNode("CORE-RTR-GDA-02", NodeType.ROUTER, "POMORSKIE");
+
+        String incidentResponse = mockMvc.perform(post("/api/incidents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentNumber": "INC-NODE-ROOT-1",
+                                  "title": "Root update incident",
+                                  "priority": "HIGH",
+                                  "region": "POMORSKIE",
+                                  "sourceAlarmType": "POWER",
+                                  "possiblyPlanned": false,
+                                  "rootNodeId": %d,
+                                  "nodes": [
+                                    { "networkNodeId": %d, "role": "ROOT" }
+                                  ]
+                                }
+                                """.formatted(firstRootNode.getId(), firstRootNode.getId())))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long incidentId = readId(incidentResponse);
+        long rootIncidentNodeId = readFirstNodeId(incidentResponse);
+
+        mockMvc.perform(put("/api/incident-nodes/{id}", rootIncidentNodeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentId": %d,
+                                  "networkNodeId": %d,
+                                  "role": "ROOT"
+                                }
+                                """.formatted(incidentId, secondRootNode.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.networkNodeId").value(secondRootNode.getId()))
+                .andExpect(jsonPath("$.role").value("ROOT"));
+
+        mockMvc.perform(get("/api/incidents/{id}", incidentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rootNodeId").value(secondRootNode.getId()))
+                .andExpect(jsonPath("$.nodes.length()").value(1))
+                .andExpect(jsonPath("$.nodes[0].networkNodeId").value(secondRootNode.getId()));
+    }
+
+    @Test
+    void incidentNodeDirectDeleteShouldRejectRootNode() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-LOD-01", NodeType.ROUTER, "LODZKIE");
+
+        String incidentResponse = mockMvc.perform(post("/api/incidents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentNumber": "INC-NODE-ROOT-DEL",
+                                  "title": "Root delete incident",
+                                  "priority": "HIGH",
+                                  "region": "LODZKIE",
+                                  "sourceAlarmType": "POWER",
+                                  "possiblyPlanned": false,
+                                  "rootNodeId": %d,
+                                  "nodes": [
+                                    { "networkNodeId": %d, "role": "ROOT" }
+                                  ]
+                                }
+                                """.formatted(rootNode.getId(), rootNode.getId())))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long rootIncidentNodeId = readFirstNodeId(incidentResponse);
+
+        mockMvc.perform(delete("/api/incident-nodes/{id}", rootIncidentNodeId))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("ROOT incident node cannot be deleted directly"));
+    }
+
+    @Test
     void maintenanceWindowCrudShouldWork() throws Exception {
         NetworkNode rootNode = saveNode("RAN-GNB-WAW-01", NodeType.G_NODE_B, "MAZOWIECKIE");
         NetworkNode affectedNode = saveNode("RAN-GNB-WAW-02", NodeType.G_NODE_B, "MAZOWIECKIE");
@@ -147,6 +274,55 @@ class ReferenceDataApiIntegrationTest extends AbstractPostgresIntegrationTest {
                 .andExpect(jsonPath("$.networkNodeIds.length()").value(1));
 
         mockMvc.perform(delete("/api/maintenance-windows/{id}", windowId))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void maintenanceNodeDirectCrudShouldWork() throws Exception {
+        NetworkNode firstNode = saveNode("RAN-ENB-KRK-01", NodeType.E_NODE_B, "MALOPOLSKIE");
+        NetworkNode secondNode = saveNode("RAN-ENB-KRK-02", NodeType.E_NODE_B, "MALOPOLSKIE");
+
+        String windowResponse = mockMvc.perform(post("/api/maintenance-windows")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Maintenance nodes direct CRUD",
+                                  "description": "Maintenance node test",
+                                  "status": "PLANNED",
+                                  "startTime": "2026-04-01T00:00:00",
+                                  "endTime": "2026-04-01T02:00:00",
+                                  "networkNodeIds": [%d]
+                                }
+                                """.formatted(firstNode.getId())))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long windowId = readId(windowResponse);
+
+        String createResponse = mockMvc.perform(post("/api/maintenance-nodes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "maintenanceWindowId": %d,
+                                  "networkNodeId": %d
+                                }
+                                """.formatted(windowId, secondNode.getId())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.maintenanceWindowId").value(windowId))
+                .andExpect(jsonPath("$.networkNodeId").value(secondNode.getId()))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long maintenanceNodeId = readId(createResponse);
+
+        mockMvc.perform(get("/api/maintenance-nodes/{id}", maintenanceNodeId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.networkNodeId").value(secondNode.getId()));
+
+        mockMvc.perform(delete("/api/maintenance-nodes/{id}", maintenanceNodeId))
                 .andExpect(status().isNoContent());
     }
 
@@ -203,6 +379,48 @@ class ReferenceDataApiIntegrationTest extends AbstractPostgresIntegrationTest {
                 .andExpect(jsonPath("$.status").value("ACKNOWLEDGED"));
 
         mockMvc.perform(delete("/api/alarm-events/{id}", alarmId))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void incidentTimelineDirectCrudShouldWork() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-SBC-SZZ-01", NodeType.SBC, "ZACHODNIOPOMORSKIE");
+        long incidentId = createIncidentWithSingleRoot(rootNode.getId(), "INC-TL-DIRECT-1");
+
+        String createResponse = mockMvc.perform(post("/api/incident-timeline")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentId": %d,
+                                  "eventType": "MANUAL_NOTE",
+                                  "message": "Created directly"
+                                }
+                                """.formatted(incidentId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.incidentId").value(incidentId))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long timelineId = readId(createResponse);
+
+        mockMvc.perform(get("/api/incident-timeline/{id}", timelineId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eventType").value("MANUAL_NOTE"));
+
+        mockMvc.perform(put("/api/incident-timeline/{id}", timelineId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentId": %d,
+                                  "eventType": "MANUAL_NOTE",
+                                  "message": "Updated directly"
+                                }
+                                """.formatted(incidentId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Updated directly"));
+
+        mockMvc.perform(delete("/api/incident-timeline/{id}", timelineId))
                 .andExpect(status().isNoContent());
     }
 
@@ -299,9 +517,39 @@ class ReferenceDataApiIntegrationTest extends AbstractPostgresIntegrationTest {
         return readId(responseBody);
     }
 
+    private long createIncidentWithSingleRoot(long rootNodeId, String incidentNumber) throws Exception {
+        String responseBody = mockMvc.perform(post("/api/incidents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentNumber": "%s",
+                                  "title": "Integration incident",
+                                  "priority": "HIGH",
+                                  "region": "MAZOWIECKIE",
+                                  "sourceAlarmType": "POWER",
+                                  "possiblyPlanned": false,
+                                  "rootNodeId": %d,
+                                  "nodes": [
+                                    { "networkNodeId": %d, "role": "ROOT" }
+                                  ]
+                                }
+                                """.formatted(incidentNumber, rootNodeId, rootNodeId)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        return readId(responseBody);
+    }
+
     private long readId(String responseBody) throws Exception {
         JsonNode jsonNode = objectMapper.readTree(responseBody);
         return jsonNode.get("id").asLong();
+    }
+
+    private long readFirstNodeId(String responseBody) throws Exception {
+        JsonNode jsonNode = objectMapper.readTree(responseBody);
+        return jsonNode.get("nodes").get(0).get("id").asLong();
     }
 
     private NetworkNode saveNode(String nodeName, NodeType nodeType, String region) {
