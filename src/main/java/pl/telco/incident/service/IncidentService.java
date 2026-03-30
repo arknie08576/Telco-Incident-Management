@@ -272,6 +272,8 @@ public class IncidentService {
         }
 
         incidentRepository.delete(incident);
+        incidentRepository.flush();
+        logIncidentBusinessEvent("delete", "DELETED", incident, incident.getStatus(), null, false);
     }
 
     @Transactional(readOnly = true)
@@ -292,7 +294,9 @@ public class IncidentService {
         timeline.setEventType(request.getEventType().trim());
         timeline.setMessage(request.getMessage().trim());
 
-        return mapTimelineToResponse(incidentTimelineRepository.save(timeline));
+        IncidentTimeline saved = incidentTimelineRepository.save(timeline);
+        logIncidentTimelineCrudEvent("create", saved, "scoped");
+        return mapTimelineToResponse(saved);
     }
 
     @Transactional
@@ -309,7 +313,9 @@ public class IncidentService {
         timeline.setEventType(request.getEventType().trim());
         timeline.setMessage(request.getMessage().trim());
 
-        return mapTimelineToResponse(incidentTimelineRepository.save(timeline));
+        IncidentTimeline saved = incidentTimelineRepository.save(timeline);
+        logIncidentTimelineCrudEvent("update", saved, "scoped");
+        return mapTimelineToResponse(saved);
     }
 
     @Transactional
@@ -319,6 +325,7 @@ public class IncidentService {
         IncidentTimeline timeline = incidentTimelineRepository.findByIdAndIncidentId(timelineId, incidentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Incident timeline event not found: " + timelineId));
 
+        logIncidentTimelineCrudEvent("delete", timeline, "scoped");
         incidentTimelineRepository.delete(timeline);
     }
 
@@ -404,6 +411,18 @@ public class IncidentService {
         fields.put("noteProvided", noteProvided);
 
         log.info("incident_event {}", StructuredArguments.entries(fields));
+    }
+
+    private void logIncidentTimelineCrudEvent(String eventAction, IncidentTimeline timeline, String apiMode) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("entityId", timeline.getId());
+        fields.put("incidentId", timeline.getIncident().getId());
+        fields.put("eventType", timeline.getEventType());
+        fields.put("message", timeline.getMessage());
+        fields.put("apiMode", apiMode);
+        fields.put("createdAt", timeline.getCreatedAt());
+
+        CrudEventLogger.log(log, "incident_timeline", eventAction, fields);
     }
 
     private Incident findIncidentByIdOrThrow(Long id) {

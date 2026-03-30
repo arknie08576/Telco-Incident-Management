@@ -1,6 +1,7 @@
 package pl.telco.incident.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.MaintenanceNodeRequest;
@@ -14,8 +15,11 @@ import pl.telco.incident.repository.MaintenanceNodeRepository;
 import pl.telco.incident.repository.MaintenanceWindowRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MaintenanceNodeService {
@@ -44,7 +48,9 @@ public class MaintenanceNodeService {
         maintenanceNode.setMaintenanceWindow(findMaintenanceWindowByIdOrThrow(request.getMaintenanceWindowId()));
         maintenanceNode.setNetworkNode(findNetworkNodeByIdOrThrow(request.getNetworkNodeId()));
 
-        return mapToResponse(maintenanceNodeRepository.save(maintenanceNode));
+        MaintenanceNode saved = maintenanceNodeRepository.save(maintenanceNode);
+        logMaintenanceNodeCrudEvent("create", saved);
+        return mapToResponse(saved);
     }
 
     @Transactional
@@ -55,12 +61,16 @@ public class MaintenanceNodeService {
         maintenanceNode.setMaintenanceWindow(findMaintenanceWindowByIdOrThrow(request.getMaintenanceWindowId()));
         maintenanceNode.setNetworkNode(findNetworkNodeByIdOrThrow(request.getNetworkNodeId()));
 
-        return mapToResponse(maintenanceNodeRepository.save(maintenanceNode));
+        MaintenanceNode saved = maintenanceNodeRepository.save(maintenanceNode);
+        logMaintenanceNodeCrudEvent("update", saved);
+        return mapToResponse(saved);
     }
 
     @Transactional
     public void deleteMaintenanceNode(Long id) {
-        maintenanceNodeRepository.delete(findByIdOrThrow(id));
+        MaintenanceNode maintenanceNode = findByIdOrThrow(id);
+        logMaintenanceNodeCrudEvent("delete", maintenanceNode);
+        maintenanceNodeRepository.delete(maintenanceNode);
     }
 
     private MaintenanceNode findByIdOrThrow(Long id) {
@@ -102,5 +112,15 @@ public class MaintenanceNodeService {
         response.setNetworkNodeId(maintenanceNode.getNetworkNode().getId());
         response.setCreatedAt(maintenanceNode.getCreatedAt());
         return response;
+    }
+
+    private void logMaintenanceNodeCrudEvent(String eventAction, MaintenanceNode maintenanceNode) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("entityId", maintenanceNode.getId());
+        fields.put("maintenanceWindowId", maintenanceNode.getMaintenanceWindow().getId());
+        fields.put("networkNodeId", maintenanceNode.getNetworkNode().getId());
+        fields.put("createdAt", maintenanceNode.getCreatedAt());
+
+        CrudEventLogger.log(log, "maintenance_node", eventAction, fields);
     }
 }

@@ -1,6 +1,7 @@
 package pl.telco.incident.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.IncidentNodeCrudRequest;
@@ -16,9 +17,12 @@ import pl.telco.incident.repository.IncidentNodeRepository;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class IncidentNodeService {
@@ -56,7 +60,9 @@ public class IncidentNodeService {
             incident.setRootNode(networkNode);
         }
 
-        return mapToResponse(incidentNodeRepository.save(incidentNode));
+        IncidentNode saved = incidentNodeRepository.save(incidentNode);
+        logIncidentNodeCrudEvent("create", saved);
+        return mapToResponse(saved);
     }
 
     @Transactional
@@ -78,7 +84,9 @@ public class IncidentNodeService {
             targetIncident.setRootNode(targetNetworkNode);
         }
 
-        return mapToResponse(incidentNodeRepository.save(incidentNode));
+        IncidentNode saved = incidentNodeRepository.save(incidentNode);
+        logIncidentNodeCrudEvent("update", saved);
+        return mapToResponse(saved);
     }
 
     @Transactional
@@ -89,6 +97,7 @@ public class IncidentNodeService {
             throw new BadRequestException("ROOT incident node cannot be deleted directly");
         }
 
+        logIncidentNodeCrudEvent("delete", incidentNode);
         incidentNodeRepository.delete(incidentNode);
     }
 
@@ -172,5 +181,16 @@ public class IncidentNodeService {
         response.setRole(incidentNode.getRole());
         response.setCreatedAt(incidentNode.getCreatedAt());
         return response;
+    }
+
+    private void logIncidentNodeCrudEvent(String eventAction, IncidentNode incidentNode) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("entityId", incidentNode.getId());
+        fields.put("incidentId", incidentNode.getIncident().getId());
+        fields.put("networkNodeId", incidentNode.getNetworkNode().getId());
+        fields.put("role", incidentNode.getRole());
+        fields.put("createdAt", incidentNode.getCreatedAt());
+
+        CrudEventLogger.log(log, "incident_node", eventAction, fields);
     }
 }

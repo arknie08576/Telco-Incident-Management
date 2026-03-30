@@ -1,6 +1,7 @@
 package pl.telco.incident.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.IncidentTimelineEntryRequest;
@@ -11,8 +12,11 @@ import pl.telco.incident.exception.ResourceNotFoundException;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.IncidentTimelineRepository;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class IncidentTimelineEntryService {
@@ -36,19 +40,25 @@ public class IncidentTimelineEntryService {
     public IncidentTimelineEntryResponse createIncidentTimelineEntry(IncidentTimelineEntryRequest request) {
         IncidentTimeline timeline = new IncidentTimeline();
         applyRequest(timeline, request);
-        return mapToResponse(incidentTimelineRepository.save(timeline));
+        IncidentTimeline saved = incidentTimelineRepository.save(timeline);
+        logIncidentTimelineCrudEvent("create", saved, "direct");
+        return mapToResponse(saved);
     }
 
     @Transactional
     public IncidentTimelineEntryResponse updateIncidentTimelineEntry(Long id, IncidentTimelineEntryRequest request) {
         IncidentTimeline timeline = findByIdOrThrow(id);
         applyRequest(timeline, request);
-        return mapToResponse(incidentTimelineRepository.save(timeline));
+        IncidentTimeline saved = incidentTimelineRepository.save(timeline);
+        logIncidentTimelineCrudEvent("update", saved, "direct");
+        return mapToResponse(saved);
     }
 
     @Transactional
     public void deleteIncidentTimelineEntry(Long id) {
-        incidentTimelineRepository.delete(findByIdOrThrow(id));
+        IncidentTimeline timeline = findByIdOrThrow(id);
+        logIncidentTimelineCrudEvent("delete", timeline, "direct");
+        incidentTimelineRepository.delete(timeline);
     }
 
     private IncidentTimeline findByIdOrThrow(Long id) {
@@ -75,5 +85,17 @@ public class IncidentTimelineEntryService {
         response.setMessage(timeline.getMessage());
         response.setCreatedAt(timeline.getCreatedAt());
         return response;
+    }
+
+    private void logIncidentTimelineCrudEvent(String eventAction, IncidentTimeline timeline, String apiMode) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("entityId", timeline.getId());
+        fields.put("incidentId", timeline.getIncident().getId());
+        fields.put("eventType", timeline.getEventType());
+        fields.put("message", timeline.getMessage());
+        fields.put("apiMode", apiMode);
+        fields.put("createdAt", timeline.getCreatedAt());
+
+        CrudEventLogger.log(log, "incident_timeline", eventAction, fields);
     }
 }

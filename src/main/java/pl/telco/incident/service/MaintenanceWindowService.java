@@ -1,6 +1,7 @@
 package pl.telco.incident.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.MaintenanceWindowRequest;
@@ -14,9 +15,12 @@ import pl.telco.incident.repository.MaintenanceWindowRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MaintenanceWindowService {
@@ -43,7 +47,9 @@ public class MaintenanceWindowService {
         MaintenanceWindow maintenanceWindow = new MaintenanceWindow();
         applyRequest(maintenanceWindow, request);
 
-        return mapToResponse(maintenanceWindowRepository.save(maintenanceWindow));
+        MaintenanceWindow saved = maintenanceWindowRepository.save(maintenanceWindow);
+        logMaintenanceWindowCrudEvent("create", saved);
+        return mapToResponse(saved);
     }
 
     @Transactional
@@ -53,12 +59,15 @@ public class MaintenanceWindowService {
         MaintenanceWindow maintenanceWindow = findByIdOrThrow(id);
         applyRequest(maintenanceWindow, request);
 
-        return mapToResponse(maintenanceWindowRepository.save(maintenanceWindow));
+        MaintenanceWindow saved = maintenanceWindowRepository.save(maintenanceWindow);
+        logMaintenanceWindowCrudEvent("update", saved);
+        return mapToResponse(saved);
     }
 
     @Transactional
     public void deleteMaintenanceWindow(Long id) {
         MaintenanceWindow maintenanceWindow = findByIdOrThrow(id);
+        logMaintenanceWindowCrudEvent("delete", maintenanceWindow);
         maintenanceWindowRepository.delete(maintenanceWindow);
     }
 
@@ -118,5 +127,21 @@ public class MaintenanceWindowService {
                 .map(maintenanceNode -> maintenanceNode.getNetworkNode().getId())
                 .toList());
         return response;
+    }
+
+    private void logMaintenanceWindowCrudEvent(String eventAction, MaintenanceWindow maintenanceWindow) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("entityId", maintenanceWindow.getId());
+        fields.put("title", maintenanceWindow.getTitle());
+        fields.put("maintenanceWindowStatus", maintenanceWindow.getStatus());
+        fields.put("startTime", maintenanceWindow.getStartTime());
+        fields.put("endTime", maintenanceWindow.getEndTime());
+        fields.put("nodeCount", maintenanceWindow.getMaintenanceNodes().size());
+        fields.put("networkNodeIds", maintenanceWindow.getMaintenanceNodes().stream()
+                .map(maintenanceNode -> maintenanceNode.getNetworkNode().getId())
+                .toList());
+        fields.put("createdAt", maintenanceWindow.getCreatedAt());
+
+        CrudEventLogger.log(log, "maintenance_window", eventAction, fields);
     }
 }

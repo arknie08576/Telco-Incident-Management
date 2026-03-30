@@ -1,5 +1,7 @@
 # Incident KQL Pack
 
+Dla przekrojowego CRUD wszystkich tabel zobacz tez `crud-kql.md`.
+
 Wszystkie logi biznesowe incidentow:
 
 ```text

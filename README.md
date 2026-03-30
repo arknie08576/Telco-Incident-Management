@@ -286,7 +286,8 @@ Przyklad wylaczenia seeda:
 Aplikacja ma przygotowane podstawy pod centralizacje logow:
 - `X-Request-Id` dla kazdego requestu
 - logowanie request/response na warstwie HTTP
-- logi biznesowe dla create, update i lifecycle incidentow
+- logi biznesowe dla create, update, delete i lifecycle incidentow
+- strukturalne logi CRUD dla `network_node`, `maintenance_window`, `maintenance_node`, `alarm_event`, `incident_node` i `incident_timeline`
 - logowanie bledow w `GlobalExceptionHandler`
 - profil `elk`, ktory wysyla logi JSON bezposrednio do Logstash po TCP
 - Spring Boot Actuator dla darmowych endpointow observability
@@ -353,10 +354,13 @@ Przykladowe pola w logach:
 - `eventDataset`
 - `eventCategory`
 - `eventAction`
+- `entityId`
 - `timelineEventType`
 - `incidentId`
 - `incidentNumber`
 - `incidentStatus`
+- `maintenanceWindowStatus`
+- `alarmEventStatus`
 - `priority`
 - `region`
 - `possiblyPlanned`
@@ -368,7 +372,9 @@ Repo zawiera prosty starter do Kibany:
 - importowalny dashboard: `elk/kibana/saved-objects/telco-incident-observability.ndjson`
 - skrypt importu: `elk/kibana/import-saved-objects.ps1`
 - generator ruchu demo do API: `elk/demo/generate-dashboard-data.ps1`
-- paczka gotowych KQL: `elk/kibana/queries/incident-kql.md`
+- paczka gotowych KQL:
+  - `elk/kibana/queries/incident-kql.md`
+  - `elk/kibana/queries/crud-kql.md`
 
 Import dashboardu:
 
@@ -389,7 +395,8 @@ Domyslnie skrypt:
 - korzysta z seed node'ow `1` jako `ROOT` oraz `2,3` jako `AFFECTED`
 - tworzy kilka incidentow
 - wykonuje `update`, `acknowledge`, `resolve`, `close`
-- dorzuca kilka `GET` do listy, detalu i timeline
+- wykonuje CRUD dla `network_node`, `maintenance_window`, `maintenance_node`, `alarm_event`, `incident_node` i `incident_timeline`
+- dorzuca kilka `GET` do list, detali i timeline
 
 Jesli masz inne ID node'ow albo inny adres aplikacji:
 
@@ -431,6 +438,7 @@ Po imporcie w Kibanie pojawi sie dashboard:
 
 ```text
 Telco Incident Observability
+Telco Domain CRUD Observability
 ```
 
 To nie jest rozbudowany dashboard produkcyjny. To lekki starter pod projekt studencki:
@@ -441,6 +449,13 @@ To nie jest rozbudowany dashboard produkcyjny. To lekki starter pod projekt stud
 - eventy w czasie
 - rozklad po `eventAction`
 - tabele ostatnich eventow do szybkiego drilldownu
+- drugi dashboard dla przekrojowego CRUD wszystkich tabel:
+  - laczna liczba strukturalnych eventow domenowych
+  - liczba datasetow obecnych w logach
+  - rozklad po `eventDataset`
+  - rozklad po `eventAction`
+  - rozklad po `eventCategory`
+  - tabela ostatnich eventow CRUD
 
 ## Incident API
 

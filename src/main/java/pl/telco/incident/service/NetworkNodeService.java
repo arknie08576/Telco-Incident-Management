@@ -1,6 +1,7 @@
 package pl.telco.incident.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,8 +12,11 @@ import pl.telco.incident.exception.ConflictException;
 import pl.telco.incident.exception.ResourceNotFoundException;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class NetworkNodeService {
@@ -38,7 +42,9 @@ public class NetworkNodeService {
         NetworkNode networkNode = new NetworkNode();
         applyRequest(networkNode, request);
 
-        return mapToResponse(networkNodeRepository.save(networkNode));
+        NetworkNode saved = networkNodeRepository.save(networkNode);
+        logNetworkNodeCrudEvent("create", saved);
+        return mapToResponse(saved);
     }
 
     @Transactional
@@ -52,7 +58,9 @@ public class NetworkNodeService {
 
         applyRequest(networkNode, request);
 
-        return mapToResponse(networkNodeRepository.save(networkNode));
+        NetworkNode saved = networkNodeRepository.save(networkNode);
+        logNetworkNodeCrudEvent("update", saved);
+        return mapToResponse(saved);
     }
 
     @Transactional
@@ -62,6 +70,7 @@ public class NetworkNodeService {
         try {
             networkNodeRepository.delete(networkNode);
             networkNodeRepository.flush();
+            logNetworkNodeCrudEvent("delete", networkNode);
         } catch (DataIntegrityViolationException ex) {
             throw new ConflictException("Network node is still referenced and cannot be deleted: " + id);
         }
@@ -98,5 +107,18 @@ public class NetworkNodeService {
         response.setActive(networkNode.getActive());
         response.setCreatedAt(networkNode.getCreatedAt());
         return response;
+    }
+
+    private void logNetworkNodeCrudEvent(String eventAction, NetworkNode networkNode) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("entityId", networkNode.getId());
+        fields.put("nodeName", networkNode.getNodeName());
+        fields.put("nodeType", networkNode.getNodeType());
+        fields.put("region", networkNode.getRegion());
+        fields.put("vendor", networkNode.getVendor());
+        fields.put("active", networkNode.getActive());
+        fields.put("createdAt", networkNode.getCreatedAt());
+
+        CrudEventLogger.log(log, "network_node", eventAction, fields);
     }
 }

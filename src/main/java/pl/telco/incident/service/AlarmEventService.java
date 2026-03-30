@@ -1,6 +1,7 @@
 package pl.telco.incident.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.AlarmEventRequest;
@@ -16,8 +17,11 @@ import pl.telco.incident.repository.IncidentNodeRepository;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AlarmEventService {
@@ -46,7 +50,9 @@ public class AlarmEventService {
         AlarmEvent alarmEvent = new AlarmEvent();
         applyRequest(alarmEvent, request);
 
-        return mapToResponse(alarmEventRepository.save(alarmEvent));
+        AlarmEvent saved = alarmEventRepository.save(alarmEvent);
+        logAlarmEventCrudEvent("create", saved);
+        return mapToResponse(saved);
     }
 
     @Transactional
@@ -63,12 +69,15 @@ public class AlarmEventService {
 
         applyRequest(alarmEvent, request);
 
-        return mapToResponse(alarmEventRepository.save(alarmEvent));
+        AlarmEvent saved = alarmEventRepository.save(alarmEvent);
+        logAlarmEventCrudEvent("update", saved);
+        return mapToResponse(saved);
     }
 
     @Transactional
     public void deleteAlarmEvent(Long id) {
         AlarmEvent alarmEvent = findByIdOrThrow(id);
+        logAlarmEventCrudEvent("delete", alarmEvent);
         alarmEventRepository.delete(alarmEvent);
     }
 
@@ -143,5 +152,23 @@ public class AlarmEventService {
         response.setReceivedAt(alarmEvent.getReceivedAt());
         response.setCreatedAt(alarmEvent.getCreatedAt());
         return response;
+    }
+
+    private void logAlarmEventCrudEvent(String eventAction, AlarmEvent alarmEvent) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("entityId", alarmEvent.getId());
+        fields.put("sourceSystem", alarmEvent.getSourceSystem());
+        fields.put("externalId", alarmEvent.getExternalId());
+        fields.put("networkNodeId", alarmEvent.getNetworkNode().getId());
+        fields.put("incidentId", alarmEvent.getIncident() != null ? alarmEvent.getIncident().getId() : null);
+        fields.put("alarmType", alarmEvent.getAlarmType());
+        fields.put("severity", alarmEvent.getSeverity());
+        fields.put("alarmEventStatus", alarmEvent.getStatus());
+        fields.put("suppressedByMaintenance", alarmEvent.getSuppressedByMaintenance());
+        fields.put("occurredAt", alarmEvent.getOccurredAt());
+        fields.put("receivedAt", alarmEvent.getReceivedAt());
+        fields.put("createdAt", alarmEvent.getCreatedAt());
+
+        CrudEventLogger.log(log, "alarm_event", eventAction, fields);
     }
 }
