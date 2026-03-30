@@ -233,6 +233,80 @@ class ReferenceDataApiIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void incidentNodeDirectCreateShouldRejectDuplicateRelation() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-OLS-01", NodeType.ROUTER, "WARMINSKO_MAZURSKIE");
+        NetworkNode affectedNode = saveNode("RAN-GNB-OLS-01", NodeType.G_NODE_B, "WARMINSKO_MAZURSKIE");
+        long incidentId = createIncidentWithSingleRoot(rootNode.getId(), "INC-NODE-CONFLICT-1");
+
+        mockMvc.perform(post("/api/incident-nodes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentId": %d,
+                                  "networkNodeId": %d,
+                                  "role": "AFFECTED"
+                                }
+                                """.formatted(incidentId, affectedNode.getId())))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/incident-nodes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentId": %d,
+                                  "networkNodeId": %d,
+                                  "role": "AFFECTED"
+                                }
+                                """.formatted(incidentId, affectedNode.getId())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(
+                        "Incident node relation already exists for incidentId/networkNodeId: %d/%d"
+                                .formatted(incidentId, affectedNode.getId())
+                ));
+    }
+
+    @Test
+    void incidentNodeDirectUpdateShouldRejectRootDemotion() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-BDG-01", NodeType.ROUTER, "KUJAWSKO_POMORSKIE");
+
+        String incidentResponse = mockMvc.perform(post("/api/incidents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentNumber": "INC-NODE-ROOT-DEMOTE",
+                                  "title": "Root demotion incident",
+                                  "priority": "HIGH",
+                                  "region": "KUJAWSKO_POMORSKIE",
+                                  "sourceAlarmType": "POWER",
+                                  "possiblyPlanned": false,
+                                  "rootNodeId": %d,
+                                  "nodes": [
+                                    { "networkNodeId": %d, "role": "ROOT" }
+                                  ]
+                                }
+                                """.formatted(rootNode.getId(), rootNode.getId())))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long incidentId = readId(incidentResponse);
+        long rootIncidentNodeId = readFirstNodeId(incidentResponse);
+
+        mockMvc.perform(put("/api/incident-nodes/{id}", rootIncidentNodeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentId": %d,
+                                  "networkNodeId": %d,
+                                  "role": "AFFECTED"
+                                }
+                                """.formatted(incidentId, rootNode.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("ROOT incident node cannot be moved or demoted directly"));
+    }
+
+    @Test
     void maintenanceWindowCrudShouldWork() throws Exception {
         NetworkNode rootNode = saveNode("RAN-GNB-WAW-01", NodeType.G_NODE_B, "MAZOWIECKIE");
         NetworkNode affectedNode = saveNode("RAN-GNB-WAW-02", NodeType.G_NODE_B, "MAZOWIECKIE");
@@ -324,6 +398,44 @@ class ReferenceDataApiIntegrationTest extends AbstractPostgresIntegrationTest {
 
         mockMvc.perform(delete("/api/maintenance-nodes/{id}", maintenanceNodeId))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void maintenanceNodeDirectCreateShouldRejectDuplicateRelation() throws Exception {
+        NetworkNode node = saveNode("RAN-ENB-WRO-01", NodeType.E_NODE_B, "DOLNOSLASKIE");
+
+        String windowResponse = mockMvc.perform(post("/api/maintenance-windows")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Duplicate maintenance relation",
+                                  "description": "Conflict test",
+                                  "status": "PLANNED",
+                                  "startTime": "2026-04-02T00:00:00",
+                                  "endTime": "2026-04-02T03:00:00",
+                                  "networkNodeIds": [%d]
+                                }
+                                """.formatted(node.getId())))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long windowId = readId(windowResponse);
+
+        mockMvc.perform(post("/api/maintenance-nodes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "maintenanceWindowId": %d,
+                                  "networkNodeId": %d
+                                }
+                                """.formatted(windowId, node.getId())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(
+                        "Maintenance node relation already exists for maintenanceWindowId/networkNodeId: %d/%d"
+                                .formatted(windowId, node.getId())
+                ));
     }
 
     @Test
@@ -422,6 +534,21 @@ class ReferenceDataApiIntegrationTest extends AbstractPostgresIntegrationTest {
 
         mockMvc.perform(delete("/api/incident-timeline/{id}", timelineId))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void incidentTimelineDirectCreateShouldReturnNotFoundForMissingIncident() throws Exception {
+        mockMvc.perform(post("/api/incident-timeline")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "incidentId": 9999,
+                                  "eventType": "MANUAL_NOTE",
+                                  "message": "Missing incident"
+                                }
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Incident not found: 9999"));
     }
 
     @Test
