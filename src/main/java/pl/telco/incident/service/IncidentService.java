@@ -1,6 +1,8 @@
 package pl.telco.incident.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import net.logstash.logback.argument.StructuredArguments;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -31,9 +33,11 @@ import pl.telco.incident.repository.NetworkNodeRepository;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -53,6 +57,7 @@ import static pl.telco.incident.repository.specification.IncidentSpecifications.
 import static pl.telco.incident.repository.specification.IncidentSpecifications.closedAtFrom;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.closedAtTo;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class IncidentService {
@@ -117,6 +122,8 @@ public class IncidentService {
                 "CREATED",
                 "Incident created"
         );
+
+        logIncidentBusinessEvent("create", "CREATED", saved, null, null, false);
 
         return mapToResponse(saved);
     }
@@ -242,6 +249,8 @@ public class IncidentService {
         Incident saved = incidentRepository.save(incident);
         addTimelineEvent(saved, "UPDATED", buildUpdateMessage(changedFields));
 
+        logIncidentBusinessEvent("update", "UPDATED", saved, null, changedFields, false);
+
         return mapToResponse(saved);
     }
 
@@ -275,6 +284,8 @@ public class IncidentService {
                 buildLifecycleMessage("Incident acknowledged", request)
         );
 
+        logIncidentBusinessEvent("acknowledge", "ACKNOWLEDGED", saved, IncidentStatus.OPEN, null, hasNote(request));
+
         return mapToResponse(saved);
     }
 
@@ -298,6 +309,8 @@ public class IncidentService {
                 "RESOLVED",
                 buildLifecycleMessage("Incident resolved", request)
         );
+
+        logIncidentBusinessEvent("resolve", "RESOLVED", saved, IncidentStatus.ACKNOWLEDGED, null, hasNote(request));
 
         return mapToResponse(saved);
     }
@@ -323,7 +336,42 @@ public class IncidentService {
                 buildLifecycleMessage("Incident closed", request)
         );
 
+        logIncidentBusinessEvent("close", "CLOSED", saved, IncidentStatus.RESOLVED, null, hasNote(request));
+
         return mapToResponse(saved);
+    }
+
+    private void logIncidentBusinessEvent(
+            String eventAction,
+            String timelineEventType,
+            Incident incident,
+            IncidentStatus previousStatus,
+            List<String> changedFields,
+            boolean noteProvided
+    ) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("eventDataset", "incident");
+        fields.put("eventCategory", "incident_management");
+        fields.put("eventAction", eventAction);
+        fields.put("timelineEventType", timelineEventType);
+        fields.put("incidentId", incident.getId());
+        fields.put("incidentNumber", incident.getIncidentNumber());
+        fields.put("incidentStatus", incident.getStatus());
+        fields.put("previousStatus", previousStatus);
+        fields.put("priority", incident.getPriority());
+        fields.put("region", incident.getRegion());
+        fields.put("sourceAlarmType", incident.getSourceAlarmType());
+        fields.put("possiblyPlanned", incident.getPossiblyPlanned());
+        fields.put("rootNodeId", incident.getRootNode() != null ? incident.getRootNode().getId() : null);
+        fields.put("nodeCount", incident.getIncidentNodes() != null ? incident.getIncidentNodes().size() : 0);
+        fields.put("openedAt", incident.getOpenedAt());
+        fields.put("acknowledgedAt", incident.getAcknowledgedAt());
+        fields.put("resolvedAt", incident.getResolvedAt());
+        fields.put("closedAt", incident.getClosedAt());
+        fields.put("changedFields", changedFields);
+        fields.put("noteProvided", noteProvided);
+
+        log.info("incident_event {}", StructuredArguments.entries(fields));
     }
 
     private Incident findIncidentByIdOrThrow(Long id) {
@@ -353,11 +401,15 @@ public class IncidentService {
     }
 
     private String buildLifecycleMessage(String defaultMessage, IncidentActionRequest request) {
-        if (request == null || request.getNote() == null || request.getNote().isBlank()) {
+        if (!hasNote(request)) {
             return defaultMessage;
         }
 
         return defaultMessage + ": " + request.getNote().trim();
+    }
+
+    private boolean hasNote(IncidentActionRequest request) {
+        return request != null && request.getNote() != null && !request.getNote().isBlank();
     }
 
     private void validateIncidentNumberUniqueness(String incidentNumber) {

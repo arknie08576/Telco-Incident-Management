@@ -1,0 +1,10 @@
+spring:
+  config:
+    activate:
+      on-profile: elk
+
+app:
+  observability:
+    logstash:
+      host: localhost
+      port: 5000

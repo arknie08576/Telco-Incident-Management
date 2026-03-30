@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.test.web.servlet.MockMvc;
+import pl.telco.incident.config.RequestCorrelationFilter;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentActionRequest;
 import pl.telco.incident.dto.IncidentResponse;
@@ -33,11 +34,16 @@ import java.util.function.LongFunction;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = IncidentController.class)
-@Import({GlobalExceptionHandler.class, IncidentControllerWebMvcTest.TestConfig.class})
+@Import({
+        GlobalExceptionHandler.class,
+        RequestCorrelationFilter.class,
+        IncidentControllerWebMvcTest.TestConfig.class
+})
 class IncidentControllerWebMvcTest {
 
     @Autowired
@@ -242,6 +248,21 @@ class IncidentControllerWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CLOSED"))
                 .andExpect(jsonPath("$.incidentNumber").value("INC-600"));
+    }
+
+    @Test
+    void requestsShouldReturnGeneratedRequestIdHeader() throws Exception {
+        mockMvc.perform(get("/api/incidents"))
+                .andExpect(status().isOk())
+                .andExpect(header().exists(RequestCorrelationFilter.REQUEST_ID_HEADER));
+    }
+
+    @Test
+    void requestsShouldPreserveIncomingRequestIdHeader() throws Exception {
+        mockMvc.perform(get("/api/incidents")
+                        .header(RequestCorrelationFilter.REQUEST_ID_HEADER, "req-123"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(RequestCorrelationFilter.REQUEST_ID_HEADER, "req-123"));
     }
 
     @TestConfiguration

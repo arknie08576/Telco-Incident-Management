@@ -43,6 +43,7 @@ Obslugiwane endpointy:
 - Springdoc OpenAPI / Swagger UI
 - JUnit 5
 - Testcontainers
+- Elasticsearch + Logstash + Kibana (opcjonalnie, lokalnie)
 
 ## Architektura w repo
 
@@ -172,6 +173,131 @@ Przyklad wylaczenia seeda:
 ```powershell
 .\mvnw spring-boot:run "-Dspring-boot.run.jvmArguments=-Dapp.seed.enabled=false"
 ```
+
+## Observability i ELK
+
+Aplikacja ma przygotowane podstawy pod centralizacje logow:
+- `X-Request-Id` dla kazdego requestu
+- logowanie request/response na warstwie HTTP
+- logi biznesowe dla create, update i lifecycle incidentow
+- logowanie bledow w `GlobalExceptionHandler`
+- profil `elk`, ktory wysyla logi JSON bezposrednio do Logstash po TCP
+- Spring Boot Actuator dla darmowych endpointow observability
+
+### Actuator
+
+Dostepne endpointy:
+- `GET /actuator/health`
+- `GET /actuator/health/liveness`
+- `GET /actuator/health/readiness`
+- `GET /actuator/info`
+- `GET /actuator/metrics`
+
+To jest celowo lekki, darmowy pakiet observability dobry do projektu studenckiego:
+- healthcheck pod lokalne uruchomienie i Docker
+- podstawowe metadane aplikacji
+- metryki runtime bez wchodzenia w platne funkcje platformowe
+
+### Uruchomienie lokalnego stacka ELK
+
+Start kontenerow:
+
+```powershell
+docker compose -f docker-compose.elk.yml up -d
+```
+
+Dostepne endpointy:
+- Elasticsearch: `http://localhost:9200`
+- Kibana: `http://localhost:5601`
+- Logstash TCP input: `localhost:5000`
+
+### Start aplikacji z profilem ELK
+
+```powershell
+.\mvnw spring-boot:run "-Dspring-boot.run.profiles=elk"
+```
+
+Po starcie aplikacji logi trafia do Logstash, a potem do Elasticsearch do indeksu:
+
+```text
+telco-incident-management-YYYY.MM.dd
+```
+
+W Kibanie warto zalozyc data view:
+
+```text
+telco-incident-management-*
+```
+
+Przykladowe pola w logach:
+- `requestId`
+- `method`
+- `path`
+- `status`
+- `durationMs`
+- `eventDataset`
+- `eventCategory`
+- `eventAction`
+- `timelineEventType`
+- `incidentId`
+- `incidentNumber`
+- `incidentStatus`
+- `priority`
+- `region`
+- `possiblyPlanned`
+- `service`
+
+### Kibana starter pack
+
+Repo zawiera prosty starter do Kibany:
+- importowalny dashboard: `elk/kibana/saved-objects/telco-incident-observability.ndjson`
+- skrypt importu: `elk/kibana/import-saved-objects.ps1`
+- generator ruchu demo do API: `elk/demo/generate-dashboard-data.ps1`
+- paczka gotowych KQL: `elk/kibana/queries/incident-kql.md`
+
+Import dashboardu:
+
+```powershell
+.\elk\kibana\import-saved-objects.ps1
+```
+
+### Szybkie nakarmienie dashboardu danymi
+
+Jesli chcesz szybko zobaczyc niepuste panele w Kibanie, uruchom generator ruchu:
+
+```powershell
+.\elk\demo\generate-dashboard-data.ps1
+```
+
+Domyslnie skrypt:
+- zaklada lokalny backend pod `http://localhost:8080`
+- korzysta z seed node'ow `1` jako `ROOT` oraz `2,3` jako `AFFECTED`
+- tworzy kilka incidentow
+- wykonuje `update`, `acknowledge`, `resolve`, `close`
+- dorzuca kilka `GET` do listy, detalu i timeline
+
+Jesli masz inne ID node'ow albo inny adres aplikacji:
+
+```powershell
+.\elk\demo\generate-dashboard-data.ps1 -BaseUrl http://localhost:8080 -RootNodeId 5 -AffectedNodeIds 6,7 -IncidentCount 4
+```
+
+Po odpaleniu skryptu ustaw w Kibanie zakres czasu na `Last 24 hours` i kliknij `Refresh`.
+
+Po imporcie w Kibanie pojawi sie dashboard:
+
+```text
+Telco Incident Observability
+```
+
+To nie jest rozbudowany dashboard produkcyjny. To lekki starter pod projekt studencki:
+- metric z laczna liczba eventow incidentow
+- metric z bledami HTTP dla incident API
+- rozklad po `incidentStatus`
+- rozklad po `priority`
+- eventy w czasie
+- rozklad po `eventAction`
+- tabele ostatnich eventow do szybkiego drilldownu
 
 ## Incident API
 

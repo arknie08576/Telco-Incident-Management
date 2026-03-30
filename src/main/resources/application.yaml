@@ -25,3 +25,29 @@ server:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
+
+app:
+  observability:
+    logstash:
+      host: localhost
+      port: 5000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: Telco Incident Management
+    description: Student telco incident management backend
+    stack: Java 21, Spring Boot 3.3.5, PostgreSQL

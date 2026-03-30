@@ -1,6 +1,8 @@
 package pl.telco.incident.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
+import net.logstash.logback.argument.StructuredArguments;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -15,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import jakarta.validation.ConstraintViolationException;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -42,6 +45,14 @@ public class GlobalExceptionHandler {
                 fieldErrors
         );
 
+        log.warn(
+                "validation_failed {} {} {} {}",
+                StructuredArguments.keyValue("method", request.getMethod()),
+                StructuredArguments.keyValue("path", request.getRequestURI()),
+                StructuredArguments.keyValue("status", HttpStatus.BAD_REQUEST.value()),
+                StructuredArguments.keyValue("fieldErrors", fieldErrors)
+        );
+
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 
@@ -66,6 +77,14 @@ public class GlobalExceptionHandler {
                 fieldErrors
         );
 
+        log.warn(
+                "constraint_violation {} {} {} {}",
+                StructuredArguments.keyValue("method", request.getMethod()),
+                StructuredArguments.keyValue("path", request.getRequestURI()),
+                StructuredArguments.keyValue("status", HttpStatus.BAD_REQUEST.value()),
+                StructuredArguments.keyValue("fieldErrors", fieldErrors)
+        );
+
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 
@@ -80,6 +99,13 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 "Malformed JSON request or invalid enum value",
                 request.getRequestURI()
+        );
+
+        log.warn(
+                "http_message_not_readable {} {} {}",
+                StructuredArguments.keyValue("method", request.getMethod()),
+                StructuredArguments.keyValue("path", request.getRequestURI()),
+                StructuredArguments.keyValue("status", HttpStatus.BAD_REQUEST.value())
         );
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
@@ -100,6 +126,15 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
 
+        log.warn(
+                "method_argument_type_mismatch {} {} {} {} {}",
+                StructuredArguments.keyValue("method", request.getMethod()),
+                StructuredArguments.keyValue("path", request.getRequestURI()),
+                StructuredArguments.keyValue("status", HttpStatus.BAD_REQUEST.value()),
+                StructuredArguments.keyValue("parameter", ex.getName()),
+                StructuredArguments.keyValue("value", ex.getValue())
+        );
+
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 
@@ -114,6 +149,14 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 ex.getMessage(),
                 request.getRequestURI()
+        );
+
+        log.warn(
+                "bad_request {} {} {} {}",
+                StructuredArguments.keyValue("method", request.getMethod()),
+                StructuredArguments.keyValue("path", request.getRequestURI()),
+                StructuredArguments.keyValue("status", HttpStatus.BAD_REQUEST.value()),
+                StructuredArguments.keyValue("message", ex.getMessage())
         );
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
@@ -132,6 +175,14 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
 
+        log.warn(
+                "resource_not_found {} {} {} {}",
+                StructuredArguments.keyValue("method", request.getMethod()),
+                StructuredArguments.keyValue("path", request.getRequestURI()),
+                StructuredArguments.keyValue("status", HttpStatus.NOT_FOUND.value()),
+                StructuredArguments.keyValue("message", ex.getMessage())
+        );
+
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
     }
 
@@ -148,6 +199,14 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
 
+        log.warn(
+                "conflict {} {} {} {}",
+                StructuredArguments.keyValue("method", request.getMethod()),
+                StructuredArguments.keyValue("path", request.getRequestURI()),
+                StructuredArguments.keyValue("status", HttpStatus.CONFLICT.value()),
+                StructuredArguments.keyValue("message", ex.getMessage())
+        );
+
         return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
     }
 
@@ -162,6 +221,14 @@ public class GlobalExceptionHandler {
                 HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(),
                 "Unexpected server error",
                 request.getRequestURI()
+        );
+
+        log.error(
+                "unexpected_server_error {} {} {}",
+                StructuredArguments.keyValue("method", request.getMethod()),
+                StructuredArguments.keyValue("path", request.getRequestURI()),
+                StructuredArguments.keyValue("status", HttpStatus.INTERNAL_SERVER_ERROR.value()),
+                ex
         );
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
