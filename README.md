@@ -235,9 +235,40 @@ Przykladowe pola w logach:
 - `path`
 - `status`
 - `durationMs`
+- `eventDataset`
+- `eventCategory`
+- `eventAction`
+- `timelineEventType`
 - `incidentId`
 - `incidentNumber`
+- `incidentStatus`
+- `priority`
+- `region`
+- `possiblyPlanned`
 - `service`
+
+### Kibana starter pack
+
+Repo zawiera prosty starter do Kibany:
+- importowalny dashboard: `elk/kibana/saved-objects/telco-incident-observability.ndjson`
+- skrypt importu: `elk/kibana/import-saved-objects.ps1`
+- paczka gotowych KQL: `elk/kibana/queries/incident-kql.md`
+
+Import dashboardu:
+
+```powershell
+.\elk\kibana\import-saved-objects.ps1
+```
+
+Po imporcie w Kibanie pojawi sie dashboard:
+
+```text
+Telco Incident Observability
+```
+
+To nie jest rozbudowany dashboard produkcyjny. To lekki starter pod projekt studencki:
+- overview panel z najwazniejszymi polami structured logging
+- panel z gotowymi KQL query do szybkiego kopiowania do Discover
 
 ## Incident API
 

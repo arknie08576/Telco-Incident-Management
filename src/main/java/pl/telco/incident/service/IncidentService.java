@@ -33,9 +33,11 @@ import pl.telco.incident.repository.NetworkNodeRepository;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -121,15 +123,7 @@ public class IncidentService {
                 "Incident created"
         );
 
-        log.info(
-                "incident_created {} {} {} {} {} {}",
-                StructuredArguments.keyValue("incidentId", saved.getId()),
-                StructuredArguments.keyValue("incidentNumber", saved.getIncidentNumber()),
-                StructuredArguments.keyValue("status", saved.getStatus()),
-                StructuredArguments.keyValue("priority", saved.getPriority()),
-                StructuredArguments.keyValue("region", saved.getRegion()),
-                StructuredArguments.keyValue("rootNodeId", saved.getRootNode().getId())
-        );
+        logIncidentBusinessEvent("create", "CREATED", saved, null, null, false);
 
         return mapToResponse(saved);
     }
@@ -255,13 +249,7 @@ public class IncidentService {
         Incident saved = incidentRepository.save(incident);
         addTimelineEvent(saved, "UPDATED", buildUpdateMessage(changedFields));
 
-        log.info(
-                "incident_updated {} {} {} {}",
-                StructuredArguments.keyValue("incidentId", saved.getId()),
-                StructuredArguments.keyValue("incidentNumber", saved.getIncidentNumber()),
-                StructuredArguments.keyValue("status", saved.getStatus()),
-                StructuredArguments.keyValue("changedFields", changedFields)
-        );
+        logIncidentBusinessEvent("update", "UPDATED", saved, null, changedFields, false);
 
         return mapToResponse(saved);
     }
@@ -296,15 +284,7 @@ public class IncidentService {
                 buildLifecycleMessage("Incident acknowledged", request)
         );
 
-        log.info(
-                "incident_acknowledged {} {} {} {} {} {}",
-                StructuredArguments.keyValue("incidentId", saved.getId()),
-                StructuredArguments.keyValue("incidentNumber", saved.getIncidentNumber()),
-                StructuredArguments.keyValue("previousStatus", IncidentStatus.OPEN),
-                StructuredArguments.keyValue("status", saved.getStatus()),
-                StructuredArguments.keyValue("acknowledgedAt", saved.getAcknowledgedAt()),
-                StructuredArguments.keyValue("noteProvided", hasNote(request))
-        );
+        logIncidentBusinessEvent("acknowledge", "ACKNOWLEDGED", saved, IncidentStatus.OPEN, null, hasNote(request));
 
         return mapToResponse(saved);
     }
@@ -330,15 +310,7 @@ public class IncidentService {
                 buildLifecycleMessage("Incident resolved", request)
         );
 
-        log.info(
-                "incident_resolved {} {} {} {} {} {}",
-                StructuredArguments.keyValue("incidentId", saved.getId()),
-                StructuredArguments.keyValue("incidentNumber", saved.getIncidentNumber()),
-                StructuredArguments.keyValue("previousStatus", IncidentStatus.ACKNOWLEDGED),
-                StructuredArguments.keyValue("status", saved.getStatus()),
-                StructuredArguments.keyValue("resolvedAt", saved.getResolvedAt()),
-                StructuredArguments.keyValue("noteProvided", hasNote(request))
-        );
+        logIncidentBusinessEvent("resolve", "RESOLVED", saved, IncidentStatus.ACKNOWLEDGED, null, hasNote(request));
 
         return mapToResponse(saved);
     }
@@ -364,17 +336,42 @@ public class IncidentService {
                 buildLifecycleMessage("Incident closed", request)
         );
 
-        log.info(
-                "incident_closed {} {} {} {} {} {}",
-                StructuredArguments.keyValue("incidentId", saved.getId()),
-                StructuredArguments.keyValue("incidentNumber", saved.getIncidentNumber()),
-                StructuredArguments.keyValue("previousStatus", IncidentStatus.RESOLVED),
-                StructuredArguments.keyValue("status", saved.getStatus()),
-                StructuredArguments.keyValue("closedAt", saved.getClosedAt()),
-                StructuredArguments.keyValue("noteProvided", hasNote(request))
-        );
+        logIncidentBusinessEvent("close", "CLOSED", saved, IncidentStatus.RESOLVED, null, hasNote(request));
 
         return mapToResponse(saved);
+    }
+
+    private void logIncidentBusinessEvent(
+            String eventAction,
+            String timelineEventType,
+            Incident incident,
+            IncidentStatus previousStatus,
+            List<String> changedFields,
+            boolean noteProvided
+    ) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("eventDataset", "incident");
+        fields.put("eventCategory", "incident_management");
+        fields.put("eventAction", eventAction);
+        fields.put("timelineEventType", timelineEventType);
+        fields.put("incidentId", incident.getId());
+        fields.put("incidentNumber", incident.getIncidentNumber());
+        fields.put("incidentStatus", incident.getStatus());
+        fields.put("previousStatus", previousStatus);
+        fields.put("priority", incident.getPriority());
+        fields.put("region", incident.getRegion());
+        fields.put("sourceAlarmType", incident.getSourceAlarmType());
+        fields.put("possiblyPlanned", incident.getPossiblyPlanned());
+        fields.put("rootNodeId", incident.getRootNode() != null ? incident.getRootNode().getId() : null);
+        fields.put("nodeCount", incident.getIncidentNodes() != null ? incident.getIncidentNodes().size() : 0);
+        fields.put("openedAt", incident.getOpenedAt());
+        fields.put("acknowledgedAt", incident.getAcknowledgedAt());
+        fields.put("resolvedAt", incident.getResolvedAt());
+        fields.put("closedAt", incident.getClosedAt());
+        fields.put("changedFields", changedFields);
+        fields.put("noteProvided", noteProvided);
+
+        log.info("incident_event {}", StructuredArguments.entries(fields));
     }
 
     private Incident findIncidentByIdOrThrow(Long id) {
