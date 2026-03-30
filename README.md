@@ -111,6 +111,56 @@ Kazda akcja lifecycle:
 - Docker Desktop albo lokalny PostgreSQL
 - Maven Wrapper z repo
 
+### Pelny stack w Docker Compose
+
+Jesli chcesz uruchomic caly backend stack w kontenerach, wystarczy:
+
+```powershell
+docker compose up -d --build
+```
+
+Wazne:
+- nie uruchamiaj jednoczesnie `docker-compose.yml` i `docker-compose.elk.yml`
+- `docker-compose.yml` zawiera juz w sobie `elasticsearch`, `logstash` i `kibana`
+- jesli wczesniej odpaliles osobny ELK, najpierw go zatrzymaj:
+
+```powershell
+docker compose -f docker-compose.elk.yml down
+```
+
+Ten compose uruchamia:
+- `postgres`
+- `backend`
+- `elasticsearch`
+- `logstash`
+- `kibana`
+
+Dostep po starcie:
+- backend API: `http://localhost:8080`
+- Swagger UI: `http://localhost:8080/swagger-ui.html`
+- Actuator health: `http://localhost:8080/actuator/health`
+- PostgreSQL: `localhost:5432`
+- Elasticsearch: `http://localhost:9200`
+- Kibana: `http://localhost:5601`
+
+Backend w kontenerze:
+- laczy sie z `postgres` po sieci Compose
+- uruchamia profil `elk`
+- wysyla logi do `logstash`
+- uruchamia Flyway przy starcie
+
+Zatrzymanie stacka:
+
+```powershell
+docker compose down
+```
+
+Jesli chcesz wyczyscic tez wolumeny danych:
+
+```powershell
+docker compose down -v
+```
+
 ### Baza danych
 
 Domyslna konfiguracja developerska jest w `src/main/resources/application.yaml`:
@@ -200,6 +250,14 @@ To jest celowo lekki, darmowy pakiet observability dobry do projektu studenckieg
 
 ### Uruchomienie lokalnego stacka ELK
 
+Jesli chcesz uruchomic tylko ELK bez backendu i bez Postgresa, nadal mozesz uzyc lekkiego compose:
+
+```powershell
+docker compose -f docker-compose.elk.yml up -d
+```
+
+Ten wariant jest alternatywa dla pelnego `docker compose up -d --build`, a nie dodatkiem do niego.
+
 Start kontenerow:
 
 ```powershell
@@ -279,10 +337,38 @@ Domyslnie skrypt:
 Jesli masz inne ID node'ow albo inny adres aplikacji:
 
 ```powershell
-.\elk\demo\generate-dashboard-data.ps1 -BaseUrl http://localhost:8080 -RootNodeId 5 -AffectedNodeIds 6,7 -IncidentCount 4
+.\elk\demo\generate-dashboard-data.ps1 -BaseUrl http://localhost:8080 -RootNodeId 1 -AffectedNodeIds 2,3 -IncidentCount 4
 ```
 
 Po odpaleniu skryptu ustaw w Kibanie zakres czasu na `Last 24 hours` i kliknij `Refresh`.
+
+### Szybki scenariusz demo
+
+Najprostszy flow do pokazania projektu na demo:
+
+1. Uruchom pelny stack:
+
+```powershell
+docker compose up -d --build
+```
+
+2. Zaimportuj dashboard do Kibany:
+
+```powershell
+.\elk\kibana\import-saved-objects.ps1
+```
+
+3. Wygeneruj ruch do API:
+
+```powershell
+.\elk\demo\generate-dashboard-data.ps1
+```
+
+4. Otworz:
+- Swagger UI: `http://localhost:8080/swagger-ui.html`
+- Kibana: `http://localhost:5601`
+
+5. W Kibanie otworz dashboard `Telco Incident Observability`, ustaw `Last 24 hours` i kliknij `Refresh`.
 
 Po imporcie w Kibanie pojawi sie dashboard:
 

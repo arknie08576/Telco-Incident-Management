@@ -1,0 +1,8 @@
+.git
+.idea
+target
+elk
+.mvn\wrapper\maven-wrapper.jar
+HELP.md
+docker-compose.elk.yml
+docker-compose.yml
