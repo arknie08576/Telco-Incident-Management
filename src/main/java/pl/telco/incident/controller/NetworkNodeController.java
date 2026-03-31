@@ -90,6 +90,23 @@ public class NetworkNodeController {
         return networkNodeService.getNetworkNodes(query, region, nodeType, active);
     }
 
+    @GetMapping("/{id}")
+    @Operation(
+            summary = "Get network node by ID",
+            description = "Returns a single network inventory node."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Network node found"),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Network node not found",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
+            )
+    })
+    public NetworkNodeResponse getNetworkNodeById(@PathVariable("id") Long id) {
+        return networkNodeService.getNetworkNodeById(id);
+    }
+
     @PatchMapping("/{id}")
     @Operation(
             summary = "Update network node",

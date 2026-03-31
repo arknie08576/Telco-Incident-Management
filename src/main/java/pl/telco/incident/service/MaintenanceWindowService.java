@@ -1,6 +1,11 @@
 package pl.telco.incident.service;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.stereotype.Service;
@@ -20,11 +25,21 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class MaintenanceWindowService {
+
+    private static final Map<String, String> ALLOWED_SORT_FIELDS = Map.of(
+            "id", "mw.id",
+            "title", "mw.title",
+            "status", "mw.status",
+            "startTime", "mw.start_time",
+            "endTime", "mw.end_time"
+    );
 
     private final JdbcTemplate jdbcTemplate;
     private final NetworkNodeRepository networkNodeRepository;
@@ -195,48 +210,73 @@ public class MaintenanceWindowService {
     }
 
     @Transactional(readOnly = true)
-    public List<MaintenanceWindowResponse> getMaintenanceWindows() {
-        List<MaintenanceWindowResponse> responses = jdbcTemplate.query(
-                """
-                SELECT id, title, description, status, start_time, end_time
-                FROM maintenance_window
-                ORDER BY start_time DESC
-                """,
-                (rs, rowNum) -> {
-                    MaintenanceWindowResponse response = new MaintenanceWindowResponse();
-                    response.setId(rs.getLong("id"));
-                    response.setTitle(rs.getString("title"));
-                    response.setDescription(rs.getString("description"));
-                    response.setStatus(MaintenanceStatus.valueOf(rs.getString("status")));
-                    response.setStartTime(rs.getTimestamp("start_time").toLocalDateTime());
-                    response.setEndTime(rs.getTimestamp("end_time").toLocalDateTime());
-                    response.setNodeIds(new ArrayList<>());
-                    return response;
-                }
+    public MaintenanceWindowResponse getMaintenanceWindowById(Long id) {
+        return getMaintenanceWindowOrThrow(id);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<MaintenanceWindowResponse> getMaintenanceWindows(
+            int page,
+            int size,
+            String sortBy,
+            String direction,
+            MaintenanceStatus status,
+            List<String> statuses,
+            String title,
+            Long nodeId,
+            LocalDateTime startFrom,
+            LocalDateTime startTo,
+            LocalDateTime endFrom,
+            LocalDateTime endTo
+    ) {
+        validateSortBy(sortBy);
+        validateDateRange("startFrom", startFrom, "startTo", startTo);
+        validateDateRange("endFrom", endFrom, "endTo", endTo);
+
+        Set<MaintenanceStatus> statusFilters = mergeStatusFilters(status, statuses);
+        Sort.Direction sortDirection = parseSortDirection(direction);
+        Pageable pageable = PageRequest.of(page, size);
+
+        QueryFragments queryFragments = buildWhereClause(statusFilters, title, nodeId, startFrom, startTo, endFrom, endTo);
+
+        String listSql = """
+                SELECT mw.id, mw.title, mw.description, mw.status, mw.start_time, mw.end_time
+                FROM maintenance_window mw
+                """ + queryFragments.whereClause()
+                + " ORDER BY " + ALLOWED_SORT_FIELDS.get(sortBy) + " " + sortDirection.name() + ", mw.id DESC"
+                + " LIMIT ? OFFSET ?";
+
+        List<Object> listParams = new ArrayList<>(queryFragments.params());
+        listParams.add(size);
+        listParams.add((long) page * size);
+
+        List<MaintenanceWindowResponse> content = jdbcTemplate.query(
+                listSql,
+                (rs, rowNum) -> mapMaintenanceWindowRow(
+                        rs.getLong("id"),
+                        rs.getString("title"),
+                        rs.getString("description"),
+                        rs.getString("status"),
+                        rs.getTimestamp("start_time").toLocalDateTime(),
+                        rs.getTimestamp("end_time").toLocalDateTime()
+                ),
+                listParams.toArray()
         );
 
-        Map<Long, List<Long>> nodeIdsByWindowId = new LinkedHashMap<>();
-        jdbcTemplate.query(
-                """
-                SELECT maintenance_window_id, network_node_id
-                FROM maintenance_node
-                ORDER BY maintenance_window_id, id
-                """,
-                (ResultSetExtractor<Void>) rs -> {
-                    while (rs.next()) {
-                        nodeIdsByWindowId
-                                .computeIfAbsent(rs.getLong("maintenance_window_id"), ignored -> new ArrayList<>())
-                                .add(rs.getLong("network_node_id"));
-                    }
-                    return null;
-                }
-        );
-
-        for (MaintenanceWindowResponse response : responses) {
+        Map<Long, List<Long>> nodeIdsByWindowId = loadNodeIdsByWindowIds(content.stream()
+                .map(MaintenanceWindowResponse::getId)
+                .toList());
+        for (MaintenanceWindowResponse response : content) {
             response.setNodeIds(nodeIdsByWindowId.getOrDefault(response.getId(), List.of()));
         }
 
-        return responses;
+        Long totalElements = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM maintenance_window mw " + queryFragments.whereClause(),
+                Long.class,
+                queryFragments.params().toArray()
+        );
+
+        return new PageImpl<>(content, pageable, totalElements == null ? 0 : totalElements);
     }
 
     @Transactional(readOnly = true)
@@ -252,15 +292,14 @@ public class MaintenanceWindowService {
                         return null;
                     }
 
-                    MaintenanceWindowResponse found = new MaintenanceWindowResponse();
-                    found.setId(rs.getLong("id"));
-                    found.setTitle(rs.getString("title"));
-                    found.setDescription(rs.getString("description"));
-                    found.setStatus(MaintenanceStatus.valueOf(rs.getString("status")));
-                    found.setStartTime(rs.getTimestamp("start_time").toLocalDateTime());
-                    found.setEndTime(rs.getTimestamp("end_time").toLocalDateTime());
-                    found.setNodeIds(new ArrayList<>());
-                    return found;
+                    return mapMaintenanceWindowRow(
+                            rs.getLong("id"),
+                            rs.getString("title"),
+                            rs.getString("description"),
+                            rs.getString("status"),
+                            rs.getTimestamp("start_time").toLocalDateTime(),
+                            rs.getTimestamp("end_time").toLocalDateTime()
+                    );
                 },
                 id
         );
@@ -270,6 +309,111 @@ public class MaintenanceWindowService {
         }
 
         response.setNodeIds(loadNodeIdsByWindowId(id));
+        return response;
+    }
+
+    private QueryFragments buildWhereClause(
+            Set<MaintenanceStatus> statusFilters,
+            String title,
+            Long nodeId,
+            LocalDateTime startFrom,
+            LocalDateTime startTo,
+            LocalDateTime endFrom,
+            LocalDateTime endTo
+    ) {
+        StringBuilder whereClause = new StringBuilder("WHERE 1 = 1");
+        List<Object> params = new ArrayList<>();
+
+        if (!statusFilters.isEmpty()) {
+            whereClause.append(" AND mw.status IN (")
+                    .append(buildPlaceholders(statusFilters.size()))
+                    .append(")");
+            statusFilters.forEach(value -> params.add(value.name()));
+        }
+
+        if (title != null && !title.isBlank()) {
+            whereClause.append(" AND LOWER(mw.title) LIKE ?");
+            params.add("%" + title.trim().toLowerCase(Locale.ROOT) + "%");
+        }
+
+        if (nodeId != null) {
+            whereClause.append("""
+                     AND EXISTS (
+                         SELECT 1
+                         FROM maintenance_node mn
+                         WHERE mn.maintenance_window_id = mw.id
+                           AND mn.network_node_id = ?
+                     )
+                    """);
+            params.add(nodeId);
+        }
+
+        if (startFrom != null) {
+            whereClause.append(" AND mw.start_time >= ?");
+            params.add(Timestamp.valueOf(startFrom));
+        }
+
+        if (startTo != null) {
+            whereClause.append(" AND mw.start_time <= ?");
+            params.add(Timestamp.valueOf(startTo));
+        }
+
+        if (endFrom != null) {
+            whereClause.append(" AND mw.end_time >= ?");
+            params.add(Timestamp.valueOf(endFrom));
+        }
+
+        if (endTo != null) {
+            whereClause.append(" AND mw.end_time <= ?");
+            params.add(Timestamp.valueOf(endTo));
+        }
+
+        return new QueryFragments(whereClause.toString(), params);
+    }
+
+    private Map<Long, List<Long>> loadNodeIdsByWindowIds(List<Long> maintenanceWindowIds) {
+        if (maintenanceWindowIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, List<Long>> nodeIdsByWindowId = new LinkedHashMap<>();
+        jdbcTemplate.query(
+                """
+                SELECT maintenance_window_id, network_node_id
+                FROM maintenance_node
+                WHERE maintenance_window_id IN (%s)
+                ORDER BY maintenance_window_id, id
+                """.formatted(buildPlaceholders(maintenanceWindowIds.size())),
+                (ResultSetExtractor<Void>) rs -> {
+                    while (rs.next()) {
+                        nodeIdsByWindowId
+                                .computeIfAbsent(rs.getLong("maintenance_window_id"), ignored -> new ArrayList<>())
+                                .add(rs.getLong("network_node_id"));
+                    }
+                    return null;
+                },
+                maintenanceWindowIds.toArray()
+        );
+
+        return nodeIdsByWindowId;
+    }
+
+    private MaintenanceWindowResponse mapMaintenanceWindowRow(
+            Long id,
+            String title,
+            String description,
+            String status,
+            LocalDateTime startTime,
+            LocalDateTime endTime
+    ) {
+        MaintenanceWindowResponse response = new MaintenanceWindowResponse();
+        response.setId(id);
+        response.setTitle(title);
+        response.setDescription(description);
+        response.setStatus(MaintenanceStatus.valueOf(status));
+        response.setStartTime(startTime);
+        response.setEndTime(endTime);
+        response.setNodeIds(new ArrayList<>());
         return response;
     }
 
@@ -289,6 +433,12 @@ public class MaintenanceWindowService {
         }
     }
 
+    private void validateDateRange(String fromFieldName, LocalDateTime from, String toFieldName, LocalDateTime to) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new BadRequestException(fromFieldName + " must be earlier than or equal to " + toFieldName);
+        }
+    }
+
     private void validateNodeIdsExist(List<Long> nodeIds) {
         List<Long> existingNodeIds = networkNodeRepository.findAllById(nodeIds).stream()
                 .map(node -> node.getId())
@@ -297,6 +447,64 @@ public class MaintenanceWindowService {
         if (existingNodeIds.size() != nodeIds.size()) {
             throw new ResourceNotFoundException("One or more network nodes were not found");
         }
+    }
+
+    private void validateSortBy(String sortBy) {
+        if (!ALLOWED_SORT_FIELDS.containsKey(sortBy)) {
+            throw new BadRequestException("Unsupported sortBy value: " + sortBy);
+        }
+    }
+
+    private Sort.Direction parseSortDirection(String direction) {
+        try {
+            return Sort.Direction.fromString(direction);
+        } catch (IllegalArgumentException ex) {
+            throw new BadRequestException("Unsupported direction value: " + direction);
+        }
+    }
+
+    private Set<MaintenanceStatus> mergeStatusFilters(MaintenanceStatus status, List<String> statuses) {
+        LinkedHashSet<MaintenanceStatus> merged = new LinkedHashSet<>();
+
+        if (status != null) {
+            merged.add(status);
+        }
+        merged.addAll(parseEnumFilters(statuses, MaintenanceStatus.class, "statuses"));
+
+        return merged;
+    }
+
+    private <E extends Enum<E>> Set<E> parseEnumFilters(List<String> rawValues, Class<E> enumType, String parameterName) {
+        LinkedHashSet<E> parsedValues = new LinkedHashSet<>();
+
+        if (rawValues == null) {
+            return parsedValues;
+        }
+
+        for (String rawValue : rawValues) {
+            if (rawValue == null || rawValue.isBlank()) {
+                continue;
+            }
+
+            for (String token : rawValue.split(",")) {
+                String normalizedToken = token.trim();
+                if (normalizedToken.isEmpty()) {
+                    continue;
+                }
+
+                try {
+                    parsedValues.add(Enum.valueOf(enumType, normalizedToken.toUpperCase(Locale.ROOT)));
+                } catch (IllegalArgumentException ex) {
+                    throw new BadRequestException("Invalid value '%s' for parameter '%s'".formatted(normalizedToken, parameterName));
+                }
+            }
+        }
+
+        return parsedValues;
+    }
+
+    private String buildPlaceholders(int count) {
+        return String.join(", ", java.util.Collections.nCopies(count, "?"));
     }
 
     private List<Long> loadNodeIdsByWindowId(Long maintenanceWindowId) {
@@ -379,5 +587,8 @@ public class MaintenanceWindowService {
                 "entity_change",
                 fields
         );
+    }
+
+    private record QueryFragments(String whereClause, List<Object> params) {
     }
 }

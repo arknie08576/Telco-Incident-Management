@@ -132,9 +132,10 @@ class ObservabilityIntegrationTest extends AbstractPostgresIntegrationTest {
                 .getContentAsString();
 
         JsonNode maintenanceWindowJson = objectMapper.readTree(maintenanceWindowResponse);
-        assertThat(maintenanceWindowJson.get("id").asLong()).isPositive();
+        long maintenanceWindowId = maintenanceWindowJson.get("id").asLong();
+        assertThat(maintenanceWindowId).isPositive();
 
-        mockMvc.perform(post("/api/alarm-events")
+        String alarmEventResponse = mockMvc.perform(post("/api/alarm-events")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -151,7 +152,12 @@ class ObservabilityIntegrationTest extends AbstractPostgresIntegrationTest {
                                 """.formatted(networkNodeId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").isNumber())
-                .andExpect(jsonPath("$.externalId").value("ALARM-DEMO-OBS-01"));
+                .andExpect(jsonPath("$.externalId").value("ALARM-DEMO-OBS-01"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long alarmEventId = objectMapper.readTree(alarmEventResponse).get("id").asLong();
 
         Integer demoNodeCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM network_node WHERE node_name LIKE 'ELK-DEMO-%'",
@@ -175,13 +181,25 @@ class ObservabilityIntegrationTest extends AbstractPostgresIntegrationTest {
         assertThat(maintenanceNodeCount).isNotNull().isGreaterThan(0);
         assertThat(alarmEventCount).isNotNull().isGreaterThan(0);
 
+        mockMvc.perform(get("/api/network-nodes/{id}", networkNodeId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(networkNodeId));
+
+        mockMvc.perform(get("/api/maintenance-windows/{id}", maintenanceWindowId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(maintenanceWindowId));
+
+        mockMvc.perform(get("/api/alarm-events/{id}", alarmEventId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(alarmEventId));
+
         mockMvc.perform(get("/api/maintenance-windows"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].title").value("ELK demo maintenance public API"));
+                .andExpect(jsonPath("$.content[0].title").value("ELK demo maintenance public API"));
 
         mockMvc.perform(get("/api/alarm-events"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].externalId").value("ALARM-DEMO-OBS-01"));
+                .andExpect(jsonPath("$.content[0].externalId").value("ALARM-DEMO-OBS-01"));
     }
 
     private NetworkNode saveNode(String nodeName, NodeType nodeType, Region region) {

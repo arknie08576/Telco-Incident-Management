@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -105,6 +106,57 @@ class MaintenanceWindowApiIntegrationTest extends AbstractPostgresIntegrationTes
                         .content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Patch request does not change maintenance window"));
+    }
+
+    @Test
+    void getMaintenanceWindowsShouldSupportFiltersPaginationAndGetById() throws Exception {
+        NetworkNode firstNode = saveNode("CORE-RTR-WRO-51", NodeType.ROUTER, Region.SLASKIE);
+        NetworkNode secondNode = saveNode("RAN-GNB-WRO-52", NodeType.G_NODE_B, Region.SLASKIE);
+
+        LocalDateTime firstStart = LocalDateTime.of(2099, 1, 10, 10, 0);
+        LocalDateTime secondStart = LocalDateTime.of(2099, 1, 11, 10, 0);
+
+        createMaintenanceWindow(firstNode.getId(), secondNode.getId(), firstStart, firstStart.plusHours(2));
+
+        String filteredWindowResponse = mockMvc.perform(post("/api/maintenance-windows")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Backbone maintenance",
+                                  "description": "Maintenance used by listing filters",
+                                  "status": "IN_PROGRESS",
+                                  "startTime": "%s",
+                                  "endTime": "%s",
+                                  "nodeIds": [%d]
+                                }
+                                """.formatted(secondStart, secondStart.plusHours(3), secondNode.getId())))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long maintenanceWindowId = objectMapper.readTree(filteredWindowResponse).get("id").asLong();
+
+        mockMvc.perform(get("/api/maintenance-windows")
+                        .param("page", "0")
+                        .param("size", "1")
+                        .param("status", "IN_PROGRESS")
+                        .param("title", "Backbone")
+                        .param("nodeId", String.valueOf(secondNode.getId()))
+                        .param("sortBy", "startTime")
+                        .param("direction", "asc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(maintenanceWindowId))
+                .andExpect(jsonPath("$.content[0].title").value("Backbone maintenance"))
+                .andExpect(jsonPath("$.content[0].status").value("IN_PROGRESS"));
+
+        mockMvc.perform(get("/api/maintenance-windows/{id}", maintenanceWindowId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(maintenanceWindowId))
+                .andExpect(jsonPath("$.title").value("Backbone maintenance"))
+                .andExpect(jsonPath("$.nodeIds[0]").value(secondNode.getId()));
     }
 
     private Long createMaintenanceWindow(Long firstNodeId, Long secondNodeId, LocalDateTime startTime, LocalDateTime endTime) throws Exception {

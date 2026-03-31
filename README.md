@@ -13,12 +13,12 @@ The currently implemented and tested incident backend includes:
 - incident creation
 - detail retrieval
 - listing with filtering, sorting, and pagination
-- `network_node` create, lookup, and partial update
+- `network_node` create, detail lookup, filtered lookup, and partial update
 - partial incident updates, including replacing the root node and related node list
 - incident lifecycle handling
 - event timeline
-- maintenance window create, list, and partial update
-- alarm event create and listing
+- maintenance window create, detail lookup, filtered paginated listing, and partial update
+- alarm event create, detail lookup, filtered paginated listing, and partial update
 - OpenAPI / Swagger UI
 - stable pagination response DTO
 - global exception handling
@@ -35,12 +35,16 @@ Supported endpoints:
 - `GET /api/incidents/{id}/timeline`
 - `POST /api/network-nodes`
 - `GET /api/network-nodes`
+- `GET /api/network-nodes/{id}`
 - `PATCH /api/network-nodes/{id}`
 - `POST /api/maintenance-windows`
 - `GET /api/maintenance-windows`
+- `GET /api/maintenance-windows/{id}`
 - `PATCH /api/maintenance-windows/{id}`
 - `POST /api/alarm-events`
 - `GET /api/alarm-events`
+- `GET /api/alarm-events/{id}`
+- `PATCH /api/alarm-events/{id}`
 
 ## Stack
 
@@ -389,8 +393,8 @@ By default the script:
 - creates several incidents
 - performs business-field updates and replaces incident node assignments
 - creates and updates maintenance windows
-- creates network nodes and alarm events
-- adds several `GET` calls for list, detail, and timeline
+- creates, updates, and correlates alarm events
+- adds several `GET` calls for list, detail, timeline, and filtered paginated searches
 
 If you have different node IDs or a different application URL:
 
@@ -589,13 +593,20 @@ Supported filters:
 - `nodeType`
 - `active`
 
+### Get Network Node
+
+`GET /api/network-nodes/{id}`
+
+Returns one inventory node with its current technical metadata.
+
 ## Maintenance Window API
 
 - `POST /api/maintenance-windows`
 - `GET /api/maintenance-windows`
+- `GET /api/maintenance-windows/{id}`
 - `PATCH /api/maintenance-windows/{id}`
 
-Maintenance windows can be created with linked `nodeIds` and later partially updated.
+Maintenance windows can be created with linked `nodeIds`, retrieved by ID, listed with filters and pagination, and later partially updated.
 
 Editable fields:
 - `title`
@@ -610,6 +621,25 @@ Rules:
 - `endTime` must be later than `startTime`
 - `nodeIds`, when provided, replace the current maintenance-node links
 - all referenced nodes must exist
+
+Listing supports:
+- pagination with `page` and `size`
+- sorting with `sortBy` and `direction`
+- filters: `status`, `statuses`, `title`, `nodeId`, `startFrom`, `startTo`, `endFrom`, `endTo`
+
+The list returns the same stable pagination shape used by incidents:
+
+```json
+{
+  "content": [],
+  "number": 0,
+  "size": 10,
+  "totalElements": 0,
+  "totalPages": 0,
+  "first": true,
+  "last": true
+}
+```
 
 Example patch request:
 
@@ -627,8 +657,24 @@ Example patch request:
 
 - `POST /api/alarm-events`
 - `GET /api/alarm-events`
+- `GET /api/alarm-events/{id}`
+- `PATCH /api/alarm-events/{id}`
 
-Alarm events can be created for a `networkNodeId` and optionally correlated to an `incidentId`.
+Alarm events can be created for a `networkNodeId`, optionally correlated to an `incidentId`, retrieved by ID, filtered with pagination, and partially updated.
+
+Editable fields:
+- `incidentId`
+- `alarmType`
+- `severity`
+- `status`
+- `description`
+- `suppressedByMaintenance`
+- `occurredAt`
+
+Listing supports:
+- pagination with `page` and `size`
+- sorting with `sortBy` and `direction`
+- filters: `severity`, `severities`, `status`, `statuses`, `sourceSystem`, `externalId`, `alarmType`, `networkNodeId`, `incidentId`, `suppressedByMaintenance`, `occurredFrom`, `occurredTo`, `receivedFrom`, `receivedTo`
 
 ## Incident Listing
 
@@ -770,6 +816,24 @@ Listing:
 curl "http://localhost:8080/api/incidents?page=0&size=20&statuses=OPEN,ACKNOWLEDGED&priorities=HIGH,CRITICAL&region=MAZOWIECKIE&sortBy=openedAt&direction=desc"
 ```
 
+Maintenance listing:
+
+```bash
+curl "http://localhost:8080/api/maintenance-windows?page=0&size=10&statuses=PLANNED,IN_PROGRESS&nodeId=2&sortBy=startTime&direction=desc"
+```
+
+Alarm update:
+
+```bash
+curl -X PATCH http://localhost:8080/api/alarm-events/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "incidentId": 1,
+    "status": "ACKNOWLEDGED",
+    "suppressedByMaintenance": true
+  }'
+```
+
 ## Error Handling
 
 The API has global exception handling and returns predictable responses for the most common error classes:
@@ -791,7 +855,7 @@ Test scope:
 - incident service unit tests
 - controller and exception handling WebMvc tests
 - API integration tests on PostgreSQL via Testcontainers
-- maintenance window update integration tests
+- network node, maintenance window, and alarm event integration tests
 - OpenAPI tests
 - observability tests and `network_node` lookup tests
 
@@ -829,7 +893,7 @@ The incident backend already has a meaningful end-to-end vertical slice:
 - CRUD-lite: create, get, list, partial update
 - lifecycle with notes and timestamps
 - timeline
-- public maintenance window and alarm APIs
+- public inventory, maintenance window, and alarm APIs with filtering and pagination
 - OpenAPI documentation
 - test foundation with PostgreSQL integrations
 

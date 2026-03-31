@@ -134,6 +134,12 @@ public class NetworkNodeService {
         return responses;
     }
 
+    @Transactional(readOnly = true)
+    public NetworkNodeResponse getNetworkNodeById(Long id) {
+        return mapToResponse(networkNodeRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Network node not found: " + id)));
+    }
+
     private NetworkNodeResponse mapToResponse(NetworkNode node) {
         NetworkNodeResponse response = new NetworkNodeResponse();
         response.setId(node.getId());

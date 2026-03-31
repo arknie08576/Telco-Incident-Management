@@ -108,6 +108,9 @@ for ($index = 1; $index -le $IncidentCount; $index++) {
     Write-Host "Updated network node $($updatedNode.id) -> vendor $($updatedNode.vendor)"
     Start-Sleep -Milliseconds $DelayMs
 
+    [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/network-nodes/$($networkNode.id)")
+    Start-Sleep -Milliseconds $DelayMs
+
     $createBody = New-IncidentCreateBody `
         -IncidentNumber $incidentNumber `
         -Title $title `
@@ -208,12 +211,25 @@ for ($index = 1; $index -le $IncidentCount; $index++) {
     Write-Host "Created alarm event $($alarmEvent.id): $($alarmEvent.externalId)"
     Start-Sleep -Milliseconds $DelayMs
 
+    $updatedAlarmEvent = Invoke-IncidentApi -Method PATCH -Uri "$BaseUrl/api/alarm-events/$($alarmEvent.id)" -Body @{
+        incidentId = $createdIncident.id
+        severity = if ($index % 2 -eq 0) { "CRITICAL" } else { "MAJOR" }
+        status = if ($index % 3 -eq 0) { "CLEARED" } else { "ACKNOWLEDGED" }
+        description = "Dashboard demo alarm updated for $incidentNumber"
+        suppressedByMaintenance = $possiblyPlanned
+        occurredAt = (Get-Date).AddMinutes(-1).ToString("s")
+    }
+    Write-Host "Updated alarm event $($updatedAlarmEvent.id) -> status $($updatedAlarmEvent.status)"
+    Start-Sleep -Milliseconds $DelayMs
+
     [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/incidents?page=0&size=10&sortBy=openedAt&direction=desc")
     [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/incidents/$($createdIncident.id)")
     [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/incidents/$($createdIncident.id)/timeline")
     [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/network-nodes?q=ELK-DEMO&region=$region")
-    [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/maintenance-windows")
-    [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/alarm-events")
+    [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/maintenance-windows/$($maintenanceWindow.id)")
+    [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/maintenance-windows?page=0&size=5&statuses=PLANNED,IN_PROGRESS,COMPLETED&nodeId=$($networkNode.id)&sortBy=startTime&direction=desc")
+    [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/alarm-events/$($alarmEvent.id)")
+    [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/alarm-events?page=0&size=5&severities=MAJOR,CRITICAL&statuses=OPEN,ACKNOWLEDGED,CLEARED&incidentId=$($createdIncident.id)&sortBy=occurredAt&direction=desc")
 }
 
 Write-Host "Demo traffic generation completed." -ForegroundColor Green
