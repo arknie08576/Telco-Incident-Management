@@ -1,28 +1,30 @@
 # Telco Incident Management
 
-Backend symulujacy system NOC (Network Operations Center) do obslugi incydentow sieciowych w srodowisku telco.
+Backend simulating a NOC (Network Operations Center) system for handling network incidents in a telco environment.
 
-Projekt koncentruje sie obecnie na domenie `incident`, ale ma juz przygotowane fundamenty pod:
-- korelacje z `network_node`
-- integracje z `alarm_event`
-- awareness wzgledem `maintenance_window`
+The project currently focuses on the `incident` domain, but it already has foundations for:
+- correlations with `network_node`
+- integrations with `alarm_event`
+- awareness of `maintenance_window`
 
-## Zakres projektu
+## Project Scope
 
-Aktualnie zaimplementowany i przetestowany backend incidentow obejmuje:
-- tworzenie incydentu
-- pobranie detalu
-- liste z filtrowaniem, sortowaniem i paginacja
-- lookup `network_node` pod frontend i formularze incidentow
-- czesciowa edycje pol biznesowych
-- lifecycle incidentu
-- timeline zdarzen
+The currently implemented and tested incident backend includes:
+- incident creation
+- detail retrieval
+- listing with filtering, sorting, and pagination
+- `network_node` create, lookup, and partial update
+- partial incident updates, including replacing the root node and related node list
+- incident lifecycle handling
+- event timeline
+- maintenance window create, list, and partial update
+- alarm event create and listing
 - OpenAPI / Swagger UI
-- stabilny DTO response dla paginacji
+- stable pagination response DTO
 - global exception handling
 - `spring.jpa.open-in-view=false`
 
-Obslugiwane endpointy:
+Supported endpoints:
 - `POST /api/incidents`
 - `GET /api/incidents`
 - `GET /api/incidents/{id}`
@@ -31,7 +33,14 @@ Obslugiwane endpointy:
 - `PATCH /api/incidents/{id}/resolve`
 - `PATCH /api/incidents/{id}/close`
 - `GET /api/incidents/{id}/timeline`
+- `POST /api/network-nodes`
 - `GET /api/network-nodes`
+- `PATCH /api/network-nodes/{id}`
+- `POST /api/maintenance-windows`
+- `GET /api/maintenance-windows`
+- `PATCH /api/maintenance-windows/{id}`
+- `POST /api/alarm-events`
+- `GET /api/alarm-events`
 
 ## Stack
 
@@ -45,34 +54,34 @@ Obslugiwane endpointy:
 - Springdoc OpenAPI / Swagger UI
 - JUnit 5
 - Testcontainers
-- Elasticsearch + Logstash + Kibana (opcjonalnie, lokalnie)
+- Elasticsearch + Logstash + Kibana (optional, local)
 
-## Architektura w repo
+## Repository Architecture
 
-Glowny kod aplikacji:
+Main application code:
 - `src/main/java/pl/telco/incident/controller` - REST API
-- `src/main/java/pl/telco/incident/service` - logika biznesowa
-- `src/main/java/pl/telco/incident/repository` - repozytoria JPA i specifications
-- `src/main/java/pl/telco/incident/entity` - encje domenowe
-- `src/main/java/pl/telco/incident/dto` - requesty i response'y API
-- `src/main/java/pl/telco/incident/exception` - bledy API i handler
-- `src/main/java/pl/telco/incident/observability` - wspolny logger eventow, audit listener i logi lifecycle aplikacji
-- `src/main/java/pl/telco/incident/config` - Swagger i seed danych
+- `src/main/java/pl/telco/incident/service` - business logic
+- `src/main/java/pl/telco/incident/repository` - JPA repositories and specifications
+- `src/main/java/pl/telco/incident/entity` - domain entities
+- `src/main/java/pl/telco/incident/dto` - API requests and responses
+- `src/main/java/pl/telco/incident/exception` - API errors and exception handler
+- `src/main/java/pl/telco/incident/observability` - shared event logger, audit listener, and application lifecycle logs
+- `src/main/java/pl/telco/incident/config` - Swagger and data seeding
 
-Baza danych:
+Database:
 - `src/main/resources/db/migration/V1__init.sql`
 - `src/main/resources/db/migration/V2__add_closed_at_to_incident.sql`
 - `src/main/resources/db/migration/V3__add_incident_version_and_query_indexes.sql`
 
-Testy:
-- `src/test/java` - unit, WebMvc, integracyjne i OpenAPI
-- `src/test/resources/application-test.yaml` - testowa konfiguracja
+Tests:
+- `src/test/java` - unit, WebMvc, integration, and OpenAPI tests
+- `src/test/resources/application-test.yaml` - test configuration
 
-## Model domeny incidentu
+## Incident Domain Model
 
-Incident reprezentuje operacyjny problem w sieci telco. Na poziomie API i modelu ma obecnie:
-- identyfikator techniczny `id`
-- numer operatorski `incidentNumber`
+An incident represents an operational problem in the telco network. At the API and model level it currently includes:
+- technical identifier `id`
+- operator-facing number `incidentNumber`
 - `title`
 - `priority`
 - `status`
@@ -80,14 +89,14 @@ Incident reprezentuje operacyjny problem w sieci telco. Na poziomie API i modelu
 - `sourceAlarmType`
 - `possiblyPlanned`
 - `rootNodeId`
-- liste powiazanych node'ow
-- timestampy lifecycle:
+- list of related nodes
+- lifecycle timestamps:
   - `openedAt`
   - `acknowledgedAt`
   - `resolvedAt`
   - `closedAt`
 
-Powiazany timeline przechowuje eventy biznesowe, np.:
+The related timeline stores business events such as:
 - `CREATED`
 - `UPDATED`
 - `ACKNOWLEDGED`
@@ -96,50 +105,50 @@ Powiazany timeline przechowuje eventy biznesowe, np.:
 
 ## Lifecycle
 
-Dozwolone przejscia statusu:
+Allowed status transitions:
 - `OPEN -> ACKNOWLEDGED`
 - `ACKNOWLEDGED -> RESOLVED`
 - `RESOLVED -> CLOSED`
 
-Kazda akcja lifecycle:
-- aktualizuje status
-- ustawia odpowiedni timestamp
-- opcjonalnie zapisuje note
-- dopisuje wpis do timeline
+Each lifecycle action:
+- updates the status
+- sets the corresponding timestamp
+- optionally stores a note
+- appends a timeline entry
 
-## Uruchomienie lokalne
+## Local Run
 
-### Wymagania
+### Requirements
 
 - Java 21
-- Docker Desktop albo lokalny PostgreSQL
-- Maven Wrapper z repo
+- Docker Desktop or local PostgreSQL
+- Maven Wrapper from the repository
 
-### Pelny stack w Docker Compose
+### Full Stack in Docker Compose
 
-Jesli chcesz uruchomic caly backend stack w kontenerach, wystarczy:
+If you want to run the full backend stack in containers:
 
 ```powershell
 docker compose up -d --build
 ```
 
-Wazne:
-- nie uruchamiaj jednoczesnie `docker-compose.yml` i `docker-compose.elk.yml`
-- `docker-compose.yml` zawiera juz w sobie `elasticsearch`, `logstash` i `kibana`
-- jesli wczesniej odpaliles osobny ELK, najpierw go zatrzymaj:
+Important:
+- do not run `docker-compose.yml` and `docker-compose.elk.yml` at the same time
+- `docker-compose.yml` already includes `elasticsearch`, `logstash`, and `kibana`
+- if you started a separate ELK stack earlier, stop it first:
 
 ```powershell
 docker compose -f docker-compose.elk.yml down
 ```
 
-Ten compose uruchamia:
+This compose starts:
 - `postgres`
 - `backend`
 - `elasticsearch`
 - `logstash`
 - `kibana`
 
-Dostep po starcie:
+Available after startup:
 - backend API: `http://localhost:8080`
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - Actuator health: `http://localhost:8080/actuator/health`
@@ -147,20 +156,20 @@ Dostep po starcie:
 - Elasticsearch: `http://localhost:9200`
 - Kibana: `http://localhost:5601`
 
-Backend w kontenerze:
-- laczy sie z `postgres` po sieci Compose
-- uruchamia profile `dev,elk`
-- wysyla logi do `logstash`
-- uruchamia Flyway przy starcie
+The backend container:
+- connects to `postgres` over the Compose network
+- runs with profiles `dev,elk`
+- sends logs to `logstash`
+- runs Flyway on startup
 
-Jesli lokalnie masz juz zajete porty, mozesz nadpisac mapowanie bez edycji pliku:
+If local ports are already in use, you can override mappings without editing the file:
 
 ```powershell
 $env:POSTGRES_PORT=55432
 docker compose up -d --build
 ```
 
-Analogicznie mozna nadpisac:
+You can override these as well:
 - `BACKEND_PORT`
 - `POSTGRES_PORT`
 - `ELASTICSEARCH_PORT`
@@ -168,47 +177,47 @@ Analogicznie mozna nadpisac:
 - `LOGSTASH_PORT`
 - `LOGSTASH_MONITORING_PORT`
 
-Zatrzymanie stacka:
+Stop the stack:
 
 ```powershell
 docker compose down
 ```
 
-Jesli chcesz wyczyscic tez wolumeny danych:
+If you also want to remove data volumes:
 
 ```powershell
 docker compose down -v
 ```
 
-### Baza danych
+### Database
 
-Domyslna konfiguracja developerska jest w `src/main/resources/application.yaml`:
+Default development configuration is in `src/main/resources/application.yaml`:
 
 - URL: `jdbc:postgresql://localhost:5432/telco_incident_db`
 - user: `postgres`
-- port aplikacji: `8080`
-- haslo bazy ustaw przez `SPRING_DATASOURCE_PASSWORD`
+- application port: `8080`
+- set the database password with `SPRING_DATASOURCE_PASSWORD`
 
-Minimalny setup lokalnego PostgreSQL:
+Minimal local PostgreSQL setup:
 
 ```sql
 CREATE DATABASE telco_incident_db;
 ```
 
-Flyway uruchamia migracje automatycznie przy starcie aplikacji.
+Flyway runs migrations automatically on startup.
 
-Jesli nie chcesz uzywac domyslnej konfiguracji, zmien `application.yaml` albo nadpisz property przy starcie aplikacji.
+If you do not want to use the default configuration, change `application.yaml` or override properties when starting the application.
 
-### Start aplikacji
+### Start the Application
 
-Tryb developerski:
+Development mode:
 
 ```powershell
 $env:SPRING_DATASOURCE_PASSWORD="postgres"
 .\mvnw spring-boot:run "-Dspring-boot.run.profiles=dev"
 ```
 
-Build i uruchomienie jar:
+Build and run the jar:
 
 ```powershell
 .\mvnw clean package
@@ -217,105 +226,105 @@ java -jar target/telco-incident-management-0.0.1-SNAPSHOT.jar
 
 ### Swagger / OpenAPI
 
-Po uruchomieniu aplikacji:
+After starting the application:
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
 
-## Seed danych
+## Data Seeding
 
-Seeder jest wylaczony domyslnie poza profilem `dev` i uruchamia sie tylko wtedy, gdy tabele sa puste.
+The seeder is disabled by default outside the `dev` profile and runs only when tables are empty.
 
-Konfiguracja:
+Configuration:
 - property: `app.seed.enabled`
-- domyslnie: `false`
-- profil `dev`: `true`
-- w testach: `false`
+- default: `false`
+- `dev` profile: `true`
+- tests: `false`
 
-Seeder dodaje przykladowe:
+The seeder adds sample:
 - network nodes
 - incidents
 - maintenance windows
 - alarm events
 - incident timeline entries
 
-Implementacja: `src/main/java/pl/telco/incident/config/DataInitializer.java`
+Implementation: `src/main/java/pl/telco/incident/config/DataInitializer.java`
 
-Przyklad wylaczenia seeda:
+Example of disabling the seeder:
 
 ```powershell
 $env:SPRING_DATASOURCE_PASSWORD="postgres"
 .\mvnw spring-boot:run "-Dspring-boot.run.profiles=dev" "-Dspring-boot.run.jvmArguments=-Dapp.seed.enabled=false"
 ```
 
-## Observability i ELK
+## Observability and ELK
 
-Aplikacja ma przygotowane podstawy pod centralizacje logow:
-- `X-Request-Id` dla kazdego requestu
-- logowanie request/response na warstwie HTTP
-- logi biznesowe dla create, update i lifecycle incidentow
-- logowanie bledow w `GlobalExceptionHandler`
-- audit zmian encji JPA dla `incident`, `incident_node`, `incident_timeline` i `network_node`
-- logi seed/system dla `maintenance_window`, `maintenance_node` i `alarm_event`
-- profil `elk`, ktory wysyla logi JSON bezposrednio do Logstash po TCP
-- Spring Boot Actuator dla darmowych endpointow observability
-- metryki biznesowe lifecycle i zmian incidentow przez Micrometer
+The application includes the basics for centralized logging:
+- `X-Request-Id` for every request
+- HTTP-layer request/response logging
+- business logs for incident create, update, and lifecycle actions
+- error logging in `GlobalExceptionHandler`
+- JPA entity audit logging for `incident`, `incident_node`, `incident_timeline`, and `network_node`
+- persistence logs for `maintenance_window`, `maintenance_node`, and `alarm_event`
+- `elk` profile that sends JSON logs directly to Logstash over TCP
+- Spring Boot Actuator for free observability endpoints
+- business lifecycle and incident change metrics via Micrometer
 
 ### Actuator
 
-Dostepne endpointy:
+Available endpoints:
 - `GET /actuator/health`
 - `GET /actuator/health/liveness`
 - `GET /actuator/health/readiness`
 - `GET /actuator/info`
 - `GET /actuator/metrics`
 
-To jest celowo lekki, darmowy pakiet observability dobry do projektu studenckiego:
-- healthcheck pod lokalne uruchomienie i Docker
-- podstawowe metadane aplikacji
-- metryki runtime bez wchodzenia w platne funkcje platformowe
-- liczniki i timery biznesowe dla incident lifecycle
+This is intentionally a lightweight, free observability package suitable for a student project:
+- health checks for local run and Docker
+- basic application metadata
+- runtime metrics without using paid platform features
+- business counters and timers for incident lifecycle
 
-### Uruchomienie lokalnego stacka ELK
+### Running a Local ELK Stack
 
-Jesli chcesz uruchomic tylko ELK bez backendu i bez Postgresa, nadal mozesz uzyc lekkiego compose:
-
-```powershell
-docker compose -f docker-compose.elk.yml up -d
-```
-
-Ten wariant jest alternatywa dla pelnego `docker compose up -d --build`, a nie dodatkiem do niego.
-
-Start kontenerow:
+If you want to run only ELK without the backend and without PostgreSQL, you can still use the lightweight compose:
 
 ```powershell
 docker compose -f docker-compose.elk.yml up -d
 ```
 
-Dostepne endpointy:
+This variant is an alternative to the full `docker compose up -d --build`, not an addition to it.
+
+Start containers:
+
+```powershell
+docker compose -f docker-compose.elk.yml up -d
+```
+
+Available endpoints:
 - Elasticsearch: `http://localhost:9200`
 - Kibana: `http://localhost:5601`
 - Logstash TCP input: `localhost:5000`
 
-### Start aplikacji z profilem ELK
+### Starting the Application with ELK Profile
 
 ```powershell
 $env:SPRING_DATASOURCE_PASSWORD="postgres"
 .\mvnw spring-boot:run "-Dspring-boot.run.profiles=dev,elk"
 ```
 
-Po starcie aplikacji logi trafia do Logstash, a potem do Elasticsearch do indeksu:
+After startup, logs go to Logstash and then to Elasticsearch index:
 
 ```text
 telco-incident-management-YYYY.MM.dd
 ```
 
-W Kibanie warto zalozyc data view:
+In Kibana it is worth creating a data view:
 
 ```text
 telco-incident-management-*
 ```
 
-Przykladowe pola w logach:
+Example log fields:
 - `requestId`
 - `eventDataset`
 - `eventCategory`
@@ -327,9 +336,6 @@ Przykladowe pola w logach:
 - `path`
 - `status`
 - `durationMs`
-- `eventDataset`
-- `eventCategory`
-- `eventAction`
 - `timelineEventType`
 - `incidentId`
 - `incidentNumber`
@@ -339,7 +345,7 @@ Przykladowe pola w logach:
 - `possiblyPlanned`
 - `service`
 
-Glownie wykorzystywane datasety:
+Mainly used datasets:
 - `http`
 - `system`
 - `incident`
@@ -347,7 +353,7 @@ Glownie wykorzystywane datasety:
 - `maintenance`
 - `alarm`
 
-Przykladowe metryki biznesowe:
+Example business metrics:
 - `incident.created`
 - `incident.updated`
 - `incident.lifecycle.transition`
@@ -355,112 +361,117 @@ Przykladowe metryki biznesowe:
 - `incident.time.to_resolve`
 - `incident.time.to_close`
 
-### Kibana starter pack
+### Kibana Starter Pack
 
-Repo zawiera prosty starter do Kibany:
-- importowalny dashboard: `elk/kibana/saved-objects/telco-incident-observability.ndjson`
-- skrypt importu: `elk/kibana/import-saved-objects.ps1`
-- generator ruchu demo do API: `elk/demo/generate-dashboard-data.ps1`
-- paczka gotowych KQL: `elk/kibana/queries/incident-kql.md`
+The repository includes a simple Kibana starter pack:
+- importable dashboard: `elk/kibana/saved-objects/telco-incident-observability.ndjson`
+- import script: `elk/kibana/import-saved-objects.ps1`
+- demo API traffic generator: `elk/demo/generate-dashboard-data.ps1`
+- ready-to-use KQL pack: `elk/kibana/queries/incident-kql.md`
 
-Import dashboardu:
+Import the dashboard:
 
 ```powershell
 .\elk\kibana\import-saved-objects.ps1
 ```
 
-### Szybkie nakarmienie dashboardu danymi
+### Quickly Feeding the Dashboard with Data
 
-Jesli chcesz szybko zobaczyc niepuste panele w Kibanie, uruchom generator ruchu:
+If you want to quickly see non-empty Kibana panels, run the traffic generator:
 
 ```powershell
 .\elk\demo\generate-dashboard-data.ps1
 ```
 
-Domyslnie skrypt:
-- zaklada lokalny backend pod `http://localhost:8080`
-- korzysta z seed node'ow `1` jako `ROOT` oraz `2,3` jako `AFFECTED`
-- tworzy kilka incidentow
-- wykonuje `update`, `acknowledge`, `resolve`, `close`
-- dorzuca kilka `GET` do listy, detalu i timeline
+By default the script:
+- assumes a local backend at `http://localhost:8080`
+- uses seeded nodes `1` as `ROOT` and `2,3` as `AFFECTED`
+- creates several incidents
+- performs business-field updates and replaces incident node assignments
+- creates and updates maintenance windows
+- creates network nodes and alarm events
+- adds several `GET` calls for list, detail, and timeline
 
-Jesli masz inne ID node'ow albo inny adres aplikacji:
+If you have different node IDs or a different application URL:
 
 ```powershell
 .\elk\demo\generate-dashboard-data.ps1 -BaseUrl http://localhost:8080 -RootNodeId 1 -AffectedNodeIds 2,3 -IncidentCount 4
 ```
 
-Po odpaleniu skryptu ustaw w Kibanie zakres czasu na `Last 24 hours` i kliknij `Refresh`.
+After running the script, set the Kibana time range to `Last 24 hours` and click `Refresh`.
 
-### Szybki scenariusz demo
+### Quick Demo Scenario
 
-Najprostszy flow do pokazania projektu na demo:
+The simplest demo flow:
 
-Skrypt odpalający całe demo
+Script that starts the whole demo:
+
 ```powershell
 .\elk\demo\start-demo.ps1
 ```
 
-W kibanie kliknij Analitycs, Dashboard, Telco Platform Observability
+In Kibana click `Analytics`, `Dashboard`, then `Telco Platform Observability`.
 
-po demonstracji zamknij demo używając:
+After the demo, stop it with:
 
 ```powershell
 docker compose down -v
 ```
-Alternatywnie uruchom wszystko samemu:
-1. Uruchom pelny stack:
+
+Alternatively, run everything manually:
+
+1. Start the full stack:
 
 ```powershell
 docker compose up -d --build
 ```
 
-2. Zaimportuj dashboard do Kibany:
+2. Import the dashboard into Kibana:
 
 ```powershell
 .\elk\kibana\import-saved-objects.ps1
 ```
 
-3. Wygeneruj ruch do API:
+3. Generate API traffic:
 
 ```powershell
 .\elk\demo\generate-dashboard-data.ps1
 ```
 
-4. Otworz:
+4. Open:
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - Kibana: `http://localhost:5601`
 
-5. W Kibanie otworz dashboard `Telco Platform Observability`, ustaw `Last 24 hours` i kliknij `Refresh`.
+5. In Kibana open the `Telco Platform Observability` dashboard, set `Last 24 hours`, and click `Refresh`.
 
-Po imporcie w Kibanie pojawi sie dashboard:
+After import, this dashboard will appear in Kibana:
 
 ```text
 Telco Platform Observability
 ```
-po demonstracji zamknij demo używając:
+
+After the demo, stop it with:
 
 ```powershell
 docker compose down -v
 ```
 
-To nie jest rozbudowany dashboard produkcyjny. To lekki starter pod projekt studencki:
-- metric z laczna liczba eventow calej platformy
-- metric z bledami HTTP
-- rozklad po `eventDataset`
-- rozklad zmian persistence po `entityType`
-- eventy w czasie
-- akcje `system` i `seed`
-- aktywnosc dla `alarm` i `maintenance`
-- tabela ostatnich eventow do szybkiego drilldownu
+This is not a large production dashboard. It is a lightweight starter for a student project:
+- metric with the total number of platform events
+- metric with HTTP errors
+- distribution by `eventDataset`
+- persistence changes grouped by `tableName`
+- events over time
+- activity for incident, alarms, maintenance, and network lookups
+- recent event tables for quick drilldown
 
 ## Incident API
 
-### Create incident
+### Create Incident
 
 `POST /api/incidents`
 
-Przykladowy request:
+Example request:
 
 ```json
 {
@@ -484,63 +495,75 @@ Przykladowy request:
 }
 ```
 
-Reguly biznesowe:
-- `incidentNumber` musi byc unikalny
-- `nodes` nie moga zawierac duplikatow `networkNodeId`
-- dokladnie jeden node musi miec role `ROOT`
-- `rootNodeId` musi wskazywac ten sam node co rekord z rola `ROOT`
+Business rules:
+- `incidentNumber` must be unique
+- `nodes` cannot contain duplicate `networkNodeId`
+- exactly one node must have role `ROOT`
+- `rootNodeId` must point to the same node as the record with role `ROOT`
 
-### Get incident
+### Get Incident
 
 `GET /api/incidents/{id}`
 
-Zwraca detal incidentu:
-- aktualny status i timestampy lifecycle
+Returns incident details:
+- current status and lifecycle timestamps
 - `rootNodeId`
 - `sourceAlarmType`
 - `possiblyPlanned`
-- liste powiazanych node'ow z rolami i podstawowymi danymi inventory
+- list of related nodes with roles and basic inventory data
 
-### Update incident
+### Update Incident
 
 `PATCH /api/incidents/{id}`
 
-Endpoint wspiera partial update pol biznesowych:
+The endpoint supports partial updates of:
 - `incidentNumber`
 - `title`
 - `priority`
 - `region`
 - `sourceAlarmType`
 - `possiblyPlanned`
+- `rootNodeId`
+- `nodes`
 
-Celowo nie wspiera:
-- zmiany statusu
-- zmiany `rootNodeId`
-- zmiany listy `nodes`
+Rules:
+- a `CLOSED` incident cannot be edited
+- an empty or no-op patch returns `400`
+- changing `incidentNumber` enforces uniqueness
+- `rootNodeId` can only be sent together with `nodes`
+- `nodes` cannot contain duplicate `networkNodeId`
+- exactly one node in `nodes` must have role `ROOT`
+- when `rootNodeId` is provided, it must point to the same node that is marked as `ROOT`
+- a successful update appends an `UPDATED` event to the timeline
 
-Reguly:
-- incident `CLOSED` nie moze byc edytowany
-- pusty albo no-op patch zwraca `400`
-- zmiana `incidentNumber` pilnuje unikalnosci
-- udany update dopisuje event `UPDATED` do timeline
-
-Przykladowy request:
+Example request:
 
 ```json
 {
   "title": "Updated incident title",
   "priority": "CRITICAL",
-  "sourceAlarmType": "POWER"
+  "sourceAlarmType": "POWER",
+  "rootNodeId": 3,
+  "nodes": [
+    {
+      "networkNodeId": 3,
+      "role": "ROOT"
+    },
+    {
+      "networkNodeId": 1,
+      "role": "AFFECTED"
+    }
+  ]
 }
 ```
 
-### Lifecycle endpoints
+### Lifecycle Endpoints
 
 - `PATCH /api/incidents/{id}/acknowledge`
 - `PATCH /api/incidents/{id}/resolve`
 - `PATCH /api/incidents/{id}/close`
 
-Body moze zawierac opcjonalna notatke:
+The body may contain an optional note:
 
 ```json
 {
@@ -552,25 +575,66 @@ Body moze zawierac opcjonalna notatke:
 
 `GET /api/incidents/{id}/timeline`
 
-Zwraca eventy w kolejnosci rosnacej po `createdAt`.
+Returns events ordered ascending by `createdAt`.
 
-### Network node lookup
+### Network Node Lookup
 
 `GET /api/network-nodes`
 
-Endpoint pomocniczy pod frontend i formularze create/update.
+Helper endpoint for frontend and create/update forms.
 
-Wspiera filtry:
-- `q` - case-insensitive partial match po `nodeName`
+Supported filters:
+- `q` - case-insensitive partial match on `nodeName`
 - `region`
 - `nodeType`
 - `active`
 
-## Incident listing
+## Maintenance Window API
+
+- `POST /api/maintenance-windows`
+- `GET /api/maintenance-windows`
+- `PATCH /api/maintenance-windows/{id}`
+
+Maintenance windows can be created with linked `nodeIds` and later partially updated.
+
+Editable fields:
+- `title`
+- `description`
+- `status`
+- `startTime`
+- `endTime`
+- `nodeIds`
+
+Rules:
+- an empty or no-op patch returns `400`
+- `endTime` must be later than `startTime`
+- `nodeIds`, when provided, replace the current maintenance-node links
+- all referenced nodes must exist
+
+Example patch request:
+
+```json
+{
+  "title": "Core maintenance updated",
+  "status": "IN_PROGRESS",
+  "startTime": "2026-03-31T21:00:00",
+  "endTime": "2026-03-31T23:30:00",
+  "nodeIds": [1, 3]
+}
+```
+
+## Alarm Event API
+
+- `POST /api/alarm-events`
+- `GET /api/alarm-events`
+
+Alarm events can be created for a `networkNodeId` and optionally correlated to an `incidentId`.
+
+## Incident Listing
 
 `GET /api/incidents`
 
-Lista zwraca stabilny DTO zamiast surowego `PageImpl`:
+The list returns a stable DTO instead of raw `PageImpl`:
 
 ```json
 {
@@ -584,20 +648,20 @@ Lista zwraca stabilny DTO zamiast surowego `PageImpl`:
 }
 ```
 
-`content` listy zawiera summary incidentu. Detail z node'ami i dodatkowymi polami jest zwracany przez `GET /api/incidents/{id}` oraz odpowiedzi mutujace.
+The `content` list contains incident summary data. Details with nodes and extra fields are returned by `GET /api/incidents/{id}` and mutating responses.
 
-### Paginacja
+### Pagination
 
 - `page` - zero-based page index
-- `size` - od `1` do `100`
+- `size` - from `1` to `100`
 
-### Sortowanie
+### Sorting
 
-Parametry:
+Parameters:
 - `sortBy`
 - `direction`
 
-Obslugiwane pola sortowania:
+Supported sort fields:
 - `openedAt`
 - `acknowledgedAt`
 - `resolvedAt`
@@ -606,11 +670,11 @@ Obslugiwane pola sortowania:
 - `priority`
 - `title`
 
-Dla `acknowledgedAt`, `resolvedAt` i `closedAt` sortowanie obsluguje `NULLS_LAST`.
+For `acknowledgedAt`, `resolvedAt`, and `closedAt`, sorting supports `NULLS_LAST`.
 
-### Filtry
+### Filters
 
-Pojedyncze filtry:
+Single-value filters:
 - `priority`
 - `region`
 - `possiblyPlanned`
@@ -627,19 +691,19 @@ Pojedyncze filtry:
 - `closedFrom`
 - `closedTo`
 
-Filtry wielowartosciowe:
+Multi-value filters:
 - `priorities`
 - `statuses`
 
-`priorities` i `statuses` wspieraja:
-- parametry powtarzalne
-- wartosci comma-separated
+`priorities` and `statuses` support:
+- repeated parameters
+- comma-separated values
 
-Zakresy dat przyjmuja format ISO-8601, np. `2026-03-29T10:15:00`.
+Date ranges use ISO-8601 format, for example `2026-03-29T10:15:00`.
 
-`region` i `sourceAlarmType` sa typami domenowymi i przyjmuja wartosci enum, np. `MAZOWIECKIE`, `HARDWARE`.
+`region` and `sourceAlarmType` are domain types and accept enum values such as `MAZOWIECKIE`, `HARDWARE`.
 
-Przykladowe requesty:
+Example requests:
 
 ```text
 GET /api/incidents?status=OPEN
@@ -650,16 +714,16 @@ GET /api/incidents?openedFrom=2026-03-29T08:00:00&openedTo=2026-03-29T12:00:00
 GET /api/incidents?closedFrom=2026-03-29T10:00:00&closedTo=2026-03-29T12:00:00
 ```
 
-### Walidacja listy
+### List Validation
 
-API zwraca `400`, gdy:
-- `sortBy` jest nieobslugiwane
-- `direction` jest nieobslugiwane
-- enumy w filtrach sa niepoprawne
-- dowolny zakres dat ma `from > to`
-- `page` albo `size` sa poza dozwolonym zakresem
+The API returns `400` when:
+- `sortBy` is unsupported
+- `direction` is unsupported
+- enums in filters are invalid
+- any date range has `from > to`
+- `page` or `size` are outside the allowed range
 
-## Przykladowe wywolania curl
+## Example curl Calls
 
 Create:
 
@@ -706,64 +770,70 @@ Listing:
 curl "http://localhost:8080/api/incidents?page=0&size=20&statuses=OPEN,ACKNOWLEDGED&priorities=HIGH,CRITICAL&region=MAZOWIECKIE&sortBy=openedAt&direction=desc"
 ```
 
-## Obsluga bledow
+## Error Handling
 
-API ma globalny exception handling i zwraca przewidywalne odpowiedzi dla najczestszych klas bledow:
-- `400 Bad Request` - walidacja requestu, zle query params, zly lifecycle, empty patch
-- `404 Not Found` - brak incidentu albo referencji do node'a
-- `409 Conflict` - konflikt biznesowy, np. zajety `incidentNumber`
+The API has global exception handling and returns predictable responses for the most common error classes:
+- `400 Bad Request` - request validation, invalid query params, invalid lifecycle transition, empty patch
+- `404 Not Found` - missing incident or missing node reference
+- `409 Conflict` - business conflict, for example duplicate `incidentNumber`
 
-Kluczowy plik: `src/main/java/pl/telco/incident/exception/GlobalExceptionHandler.java`
+Key file: `src/main/java/pl/telco/incident/exception/GlobalExceptionHandler.java`
 
-## Testy
+## Tests
 
-Uruchomienie wszystkich testow:
+Run all tests:
 
 ```powershell
 .\mvnw test
 ```
 
-Zakres testow:
-- unit testy serwisu incidentow
-- WebMvc testy kontrolera i exception handling
-- integracyjne testy API na PostgreSQL przez Testcontainers
-- testy OpenAPI
-- testy observability oraz lookup `network_node`
+Test scope:
+- incident service unit tests
+- controller and exception handling WebMvc tests
+- API integration tests on PostgreSQL via Testcontainers
+- maintenance window update integration tests
+- OpenAPI tests
+- observability tests and `network_node` lookup tests
 
 Testcontainers:
-- wymagaja dostepnego Dockera
-- sa skonfigurowane z `postgres:16-alpine`
+- require Docker to be available
+- are configured with `postgres:16-alpine`
 
-Profil testowy:
+Test profile:
 - `src/test/resources/application-test.yaml`
 - `app.seed.enabled=false`
 
-## Kluczowe pliki
+## Key Files
 
 - `src/main/java/pl/telco/incident/controller/IncidentController.java`
+- `src/main/java/pl/telco/incident/controller/MaintenanceWindowController.java`
 - `src/main/java/pl/telco/incident/controller/NetworkNodeController.java`
 - `src/main/java/pl/telco/incident/service/IncidentService.java`
+- `src/main/java/pl/telco/incident/service/MaintenanceWindowService.java`
 - `src/main/java/pl/telco/incident/service/NetworkNodeService.java`
 - `src/main/java/pl/telco/incident/observability/ObservabilityEventLogger.java`
 - `src/main/java/pl/telco/incident/observability/TelcoAuditEntityListener.java`
 - `src/main/java/pl/telco/incident/repository/specification/IncidentSpecifications.java`
 - `src/main/java/pl/telco/incident/dto/IncidentUpdateRequest.java`
+- `src/main/java/pl/telco/incident/dto/MaintenanceWindowUpdateRequest.java`
 - `src/main/java/pl/telco/incident/config/OpenApiConfig.java`
 - `src/main/resources/db/migration/V3__add_incident_version_and_query_indexes.sql`
 - `src/test/java/pl/telco/incident/IncidentApiIntegrationTest.java`
+- `src/test/java/pl/telco/incident/MaintenanceWindowApiIntegrationTest.java`
 - `src/test/java/pl/telco/incident/controller/IncidentControllerWebMvcTest.java`
 - `src/test/java/pl/telco/incident/service/IncidentServiceTest.java`
 
-## Aktualny status
+## Current Status
 
-Backend incidentow ma juz sensowny pion end-to-end:
+The incident backend already has a meaningful end-to-end vertical slice:
 - CRUD-lite: create, get, list, partial update
-- lifecycle z note'ami i timestampami
+- lifecycle with notes and timestamps
 - timeline
-- dokumentacje OpenAPI
-- test foundation z integracjami na PostgreSQL
+- public maintenance window and alarm APIs
+- OpenAPI documentation
+- test foundation with PostgreSQL integrations
 
-Najbardziej naturalne kolejne kierunki rozwoju:
-- frontend incidentow oparty o obecny kontrakt API
-- observability i metryki lifecycle
-- dalsze rozszerzanie domeny alarmow i maintenance
+The most natural next steps:
+- incident frontend based on the current API contract
+- observability and lifecycle metrics
+- further expansion of alarm and maintenance domains

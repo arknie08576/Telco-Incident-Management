@@ -185,7 +185,7 @@ class IncidentServiceTest {
     @Test
     void updateIncidentShouldApplyChangedFieldsAndAddUpdatedTimelineEvent() {
         Incident incident = buildIncident(150L, "INC-150", IncidentStatus.OPEN);
-        when(incidentRepository.findById(150L)).thenReturn(Optional.of(incident));
+        when(incidentRepository.findDetailedById(150L)).thenReturn(Optional.of(incident));
         when(incidentRepository.findByIncidentNumber("INC-151")).thenReturn(Optional.empty());
 
         IncidentUpdateRequest request = new IncidentUpdateRequest();
@@ -216,7 +216,7 @@ class IncidentServiceTest {
     @Test
     void updateIncidentShouldRejectNoOpPatch() {
         Incident incident = buildIncident(151L, "INC-151", IncidentStatus.OPEN);
-        when(incidentRepository.findById(151L)).thenReturn(Optional.of(incident));
+        when(incidentRepository.findDetailedById(151L)).thenReturn(Optional.of(incident));
 
         IncidentUpdateRequest request = new IncidentUpdateRequest();
         request.setIncidentNumber("INC-151");
@@ -237,7 +237,7 @@ class IncidentServiceTest {
     @Test
     void updateIncidentShouldRejectClosedIncident() {
         Incident incident = buildIncident(152L, "INC-152", IncidentStatus.CLOSED);
-        when(incidentRepository.findById(152L)).thenReturn(Optional.of(incident));
+        when(incidentRepository.findDetailedById(152L)).thenReturn(Optional.of(incident));
 
         IncidentUpdateRequest request = new IncidentUpdateRequest();
         request.setTitle("Should fail");
@@ -252,7 +252,7 @@ class IncidentServiceTest {
     @Test
     void updateIncidentShouldRejectDuplicateIncidentNumber() {
         Incident incident = buildIncident(153L, "INC-153", IncidentStatus.OPEN);
-        when(incidentRepository.findById(153L)).thenReturn(Optional.of(incident));
+        when(incidentRepository.findDetailedById(153L)).thenReturn(Optional.of(incident));
         when(incidentRepository.findByIncidentNumber("INC-154"))
                 .thenReturn(Optional.of(Incident.builder().id(154L).incidentNumber("INC-154").build()));
 
@@ -264,6 +264,35 @@ class IncidentServiceTest {
                 .hasMessage("Incident with number already exists: INC-154");
 
         verify(incidentRepository, never()).save(any(Incident.class));
+    }
+
+    @Test
+    void updateIncidentShouldReplaceRootNodeAndIncidentNodes() {
+        Incident incident = buildIncident(154L, "INC-154", IncidentStatus.OPEN);
+        when(incidentRepository.findDetailedById(154L)).thenReturn(Optional.of(incident));
+        when(networkNodeRepository.findAllById(any())).thenReturn(List.of(rootNode, affectedNode));
+
+        IncidentUpdateRequest request = new IncidentUpdateRequest();
+        request.setRootNodeId(affectedNode.getId());
+        request.setNodes(List.of(
+                buildNodeRequest(affectedNode.getId(), IncidentNodeRole.ROOT),
+                buildNodeRequest(rootNode.getId(), IncidentNodeRole.AFFECTED)
+        ));
+
+        IncidentResponse response = incidentService.updateIncident(154L, request);
+
+        ArgumentCaptor<IncidentTimeline> timelineCaptor = ArgumentCaptor.forClass(IncidentTimeline.class);
+        verify(incidentTimelineRepository).save(timelineCaptor.capture());
+
+        assertThat(response.getRootNodeId()).isEqualTo(affectedNode.getId());
+        assertThat(response.getNodes())
+                .extracting(node -> node.getNetworkNodeId() + ":" + node.getRole().name())
+                .containsExactly("2:ROOT", "1:AFFECTED");
+        assertThat(incident.getRootNode()).isEqualTo(affectedNode);
+        assertThat(incident.getIncidentNodes())
+                .extracting(node -> node.getNetworkNode().getId() + ":" + node.getRole().name())
+                .containsExactly("2:ROOT", "1:AFFECTED");
+        assertThat(timelineCaptor.getValue().getMessage()).isEqualTo("Incident updated: rootNodeId, nodes");
     }
 
     @Test

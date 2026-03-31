@@ -201,7 +201,7 @@ public class IncidentService {
 
     @Transactional
     public IncidentResponse updateIncident(Long id, IncidentUpdateRequest request) {
-        Incident incident = findIncidentByIdOrThrow(id);
+        Incident incident = findDetailedIncidentByIdOrThrow(id);
 
         if (incident.getStatus() == IncidentStatus.CLOSED) {
             throw new BadRequestException("Closed incidents cannot be edited");
@@ -242,6 +242,7 @@ public class IncidentService {
                 "possiblyPlanned",
                 changedFields
         );
+        applyIncidentNodeUpdate(request, incident, changedFields);
 
         if (changedFields.isEmpty()) {
             throw new BadRequestException("Patch request does not change incident");
@@ -418,16 +419,7 @@ public class IncidentService {
     }
 
     private Map<Long, NetworkNode> loadRequestedNodes(IncidentCreateRequest request) {
-        Set<Long> requestedNodeIds = request.getNodes().stream()
-                .map(IncidentNodeRequest::getNetworkNodeId)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-
-        if (request.getRootNodeId() != null) {
-            requestedNodeIds.add(request.getRootNodeId());
-        }
-
-        return networkNodeRepository.findAllById(requestedNodeIds).stream()
-                .collect(Collectors.toMap(NetworkNode::getId, node -> node));
+        return loadRequestedNodes(request.getRootNodeId(), request.getNodes());
     }
 
     private void validateStatusTransition(Incident incident, IncidentStatus expectedCurrentStatus, String errorMessage) {
@@ -471,9 +463,13 @@ public class IncidentService {
     }
 
     private void validateNodeUniqueness(IncidentCreateRequest request) {
+        validateNodeUniqueness(request.getNodes());
+    }
+
+    private void validateNodeUniqueness(List<IncidentNodeRequest> nodeRequests) {
         Set<Long> uniqueNodeIds = new HashSet<>();
 
-        for (IncidentNodeRequest nodeRequest : request.getNodes()) {
+        for (IncidentNodeRequest nodeRequest : nodeRequests) {
             if (!uniqueNodeIds.add(nodeRequest.getNetworkNodeId())) {
                 throw new BadRequestException("Duplicate networkNodeId in nodes: " + nodeRequest.getNetworkNodeId());
             }
@@ -516,7 +512,11 @@ public class IncidentService {
     }
 
     private void validateRootNodeConsistency(IncidentCreateRequest request) {
-        long rootCount = request.getNodes().stream()
+        validateRootNodeConsistency(request.getNodes(), request.getRootNodeId());
+    }
+
+    private void validateRootNodeConsistency(List<IncidentNodeRequest> nodeRequests, Long rootNodeId) {
+        long rootCount = nodeRequests.stream()
                 .filter(node -> node.getRole() == IncidentNodeRole.ROOT)
                 .count();
 
@@ -524,12 +524,100 @@ public class IncidentService {
             throw new BadRequestException("Exactly one node must have role ROOT");
         }
 
-        boolean rootMatches = request.getNodes().stream()
-                .anyMatch(node -> node.getRole() == IncidentNodeRole.ROOT && request.getRootNodeId().equals(node.getNetworkNodeId()));
+        boolean rootMatches = nodeRequests.stream()
+                .anyMatch(node -> node.getRole() == IncidentNodeRole.ROOT && rootNodeId.equals(node.getNetworkNodeId()));
 
         if (!rootMatches) {
             throw new BadRequestException("rootNodeId must match the node with role ROOT");
         }
+    }
+
+    private void applyIncidentNodeUpdate(IncidentUpdateRequest request, Incident incident, List<String> changedFields) {
+        if (request.getRootNodeId() != null && request.getNodes() == null) {
+            throw new BadRequestException("rootNodeId can only be updated together with nodes");
+        }
+
+        if (request.getNodes() == null) {
+            return;
+        }
+
+        validateNodeUniqueness(request.getNodes());
+
+        Long requestedRootNodeId = resolveRequestedRootNodeId(request);
+        validateRootNodeConsistency(request.getNodes(), requestedRootNodeId);
+
+        Map<Long, NetworkNode> nodesById = loadRequestedNodes(requestedRootNodeId, request.getNodes());
+        NetworkNode requestedRootNode = nodesById.get(requestedRootNodeId);
+
+        if (requestedRootNode == null) {
+            throw new ResourceNotFoundException("Root node not found: " + requestedRootNodeId);
+        }
+
+        for (IncidentNodeRequest nodeRequest : request.getNodes()) {
+            if (!nodesById.containsKey(nodeRequest.getNetworkNodeId())) {
+                throw new ResourceNotFoundException("Network node not found: " + nodeRequest.getNetworkNodeId());
+            }
+        }
+
+        Map<Long, IncidentNodeRole> currentAssignments = incident.getIncidentNodes().stream()
+                .collect(Collectors.toMap(node -> node.getNetworkNode().getId(), IncidentNode::getRole));
+        Map<Long, IncidentNodeRole> requestedAssignments = request.getNodes().stream()
+                .collect(Collectors.toMap(IncidentNodeRequest::getNetworkNodeId, IncidentNodeRequest::getRole));
+
+        boolean rootChanged = !Objects.equals(
+                incident.getRootNode() != null ? incident.getRootNode().getId() : null,
+                requestedRootNodeId
+        );
+        boolean nodesChanged = !currentAssignments.equals(requestedAssignments);
+
+        if (!rootChanged && !nodesChanged) {
+            return;
+        }
+
+        incident.setRootNode(requestedRootNode);
+        if (nodesChanged) {
+            incident.getIncidentNodes().clear();
+            incidentRepository.flush();
+
+            for (IncidentNodeRequest nodeRequest : request.getNodes()) {
+                IncidentNode incidentNode = new IncidentNode();
+                incidentNode.setNetworkNode(nodesById.get(nodeRequest.getNetworkNodeId()));
+                incidentNode.setRole(nodeRequest.getRole());
+                incident.addIncidentNode(incidentNode);
+            }
+        }
+
+        if (rootChanged) {
+            changedFields.add("rootNodeId");
+        }
+        if (nodesChanged) {
+            changedFields.add("nodes");
+        }
+    }
+
+    private Long resolveRequestedRootNodeId(IncidentUpdateRequest request) {
+        if (request.getRootNodeId() != null) {
+            return request.getRootNodeId();
+        }
+
+        return request.getNodes().stream()
+                .filter(node -> node.getRole() == IncidentNodeRole.ROOT)
+                .map(IncidentNodeRequest::getNetworkNodeId)
+                .findFirst()
+                .orElseThrow(() -> new BadRequestException("Exactly one node must have role ROOT"));
+    }
+
+    private Map<Long, NetworkNode> loadRequestedNodes(Long rootNodeId, List<IncidentNodeRequest> nodeRequests) {
+        Set<Long> requestedNodeIds = nodeRequests.stream()
+                .map(IncidentNodeRequest::getNetworkNodeId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (rootNodeId != null) {
+            requestedNodeIds.add(rootNodeId);
+        }
+
+        return networkNodeRepository.findAllById(requestedNodeIds).stream()
+                .collect(Collectors.toMap(NetworkNode::getId, node -> node));
     }
 
     private void validateDateRange(String fromFieldName, LocalDateTime from, String toFieldName, LocalDateTime to) {

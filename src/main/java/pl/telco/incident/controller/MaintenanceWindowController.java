@@ -10,7 +10,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pl.telco.incident.dto.MaintenanceWindowCreateRequest;
 import pl.telco.incident.dto.MaintenanceWindowResponse;
+import pl.telco.incident.dto.MaintenanceWindowUpdateRequest;
 import pl.telco.incident.service.MaintenanceWindowService;
 
 import java.util.List;
@@ -42,6 +45,20 @@ public class MaintenanceWindowController {
     })
     public MaintenanceWindowResponse createMaintenanceWindow(@Valid @RequestBody MaintenanceWindowCreateRequest request) {
         return maintenanceWindowService.createMaintenanceWindow(request);
+    }
+
+    @PatchMapping("/{id}")
+    @Operation(summary = "Update maintenance window", description = "Partially updates a maintenance window and optionally replaces linked network nodes.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Maintenance window updated"),
+            @ApiResponse(responseCode = "400", description = "Validation error, invalid time range or empty patch",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Maintenance window or referenced network node not found",
+                    content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class)))
+    })
+    public MaintenanceWindowResponse updateMaintenanceWindow(@PathVariable("id") Long id,
+                                                             @Valid @RequestBody MaintenanceWindowUpdateRequest request) {
+        return maintenanceWindowService.updateMaintenanceWindow(id, request);
     }
 
     @GetMapping

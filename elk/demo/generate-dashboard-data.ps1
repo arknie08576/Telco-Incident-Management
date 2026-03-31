@@ -75,7 +75,7 @@ function New-IncidentCreateBody {
 
 $priorities = @("LOW", "MEDIUM", "HIGH", "CRITICAL")
 $regions = @("MAZOWIECKIE", "SLASKIE", "MALOPOLSKIE")
-$alarmTypes = @("POWER", "HARDWARE", "PERFORMANCE", "NETWORK")
+$alarmTypes = @("POWER", "HARDWARE", "PERFORMANCE", "NETWORK", "CAPACITY", "MAINTENANCE")
 
 Write-Host "Generating demo API traffic for Kibana dashboard..." -ForegroundColor Cyan
 Write-Host "Base URL: $BaseUrl"
@@ -133,6 +133,22 @@ for ($index = 1; $index -le $IncidentCount; $index++) {
     Write-Host "Updated incident $($updatedIncident.id) -> priority $($updatedIncident.priority)"
     Start-Sleep -Milliseconds $DelayMs
 
+    $relinkedIncident = Invoke-IncidentApi -Method PATCH -Uri "$BaseUrl/api/incidents/$($createdIncident.id)" -Body @{
+        rootNodeId = $networkNode.id
+        nodes = @(
+            @{
+                networkNodeId = $networkNode.id
+                role = "ROOT"
+            },
+            @{
+                networkNodeId = $RootNodeId
+                role = "AFFECTED"
+            }
+        )
+    }
+    Write-Host "Replaced incident nodes for $($relinkedIncident.id) -> root node $($relinkedIncident.rootNodeId)"
+    Start-Sleep -Milliseconds $DelayMs
+
     $acknowledgedIncident = Invoke-IncidentApi -Method PATCH -Uri "$BaseUrl/api/incidents/$($createdIncident.id)/acknowledge" -Body @{
         note = "Dashboard demo acknowledgement for $incidentNumber"
     }
@@ -164,6 +180,17 @@ for ($index = 1; $index -le $IncidentCount; $index++) {
         nodeIds = @($networkNode.id)
     }
     Write-Host "Created maintenance window $($maintenanceWindow.id)"
+    Start-Sleep -Milliseconds $DelayMs
+
+    $updatedMaintenanceWindow = Invoke-IncidentApi -Method PATCH -Uri "$BaseUrl/api/maintenance-windows/$($maintenanceWindow.id)" -Body @{
+        title = "ELK maintenance updated $suffix"
+        description = "Dashboard demo maintenance window $index updated"
+        status = if ($index % 2 -eq 0) { "IN_PROGRESS" } else { "COMPLETED" }
+        startTime = (Get-Date).AddMinutes(20).ToString("s")
+        endTime = (Get-Date).AddMinutes(90).ToString("s")
+        nodeIds = @($networkNode.id, $RootNodeId)
+    }
+    Write-Host "Updated maintenance window $($updatedMaintenanceWindow.id) -> status $($updatedMaintenanceWindow.status)"
     Start-Sleep -Milliseconds $DelayMs
 
     $alarmEvent = Invoke-IncidentApi -Method POST -Uri "$BaseUrl/api/alarm-events" -Body @{

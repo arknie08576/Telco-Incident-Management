@@ -90,7 +90,7 @@ public class IncidentController {
     @PatchMapping("/{id}")
     @Operation(
             summary = "Update incident",
-            description = "Partially updates editable incident fields. Lifecycle status and incident nodes are not changed by this endpoint."
+            description = "Partially updates editable incident fields, including optional replacement of the root node and linked incident nodes."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Incident updated"),

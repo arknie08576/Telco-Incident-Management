@@ -346,6 +346,53 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void updateIncidentShouldReplaceRootNodeAndNodes() throws Exception {
+        NetworkNode originalRoot = saveNode("CORE-RTR-WAW-31", NodeType.ROUTER, "MAZOWIECKIE");
+        NetworkNode newRoot = saveNode("CORE-SBC-WAW-32", NodeType.SBC, "MAZOWIECKIE");
+        NetworkNode affectedNode = saveNode("RAN-GNB-WAW-33", NodeType.G_NODE_B, "MAZOWIECKIE");
+
+        Long incidentId = createIncidentThroughApi(originalRoot, affectedNode, "INC-NODES-1");
+
+        mockMvc.perform(patch("/api/incidents/{id}", incidentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "rootNodeId": %d,
+                                  "nodes": [
+                                    {
+                                      "networkNodeId": %d,
+                                      "role": "ROOT"
+                                    },
+                                    {
+                                      "networkNodeId": %d,
+                                      "role": "AFFECTED"
+                                    }
+                                  ]
+                                }
+                                """.formatted(newRoot.getId(), newRoot.getId(), originalRoot.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rootNodeId").value(newRoot.getId()))
+                .andExpect(jsonPath("$.nodes.length()").value(2))
+                .andExpect(jsonPath("$.nodes[0].networkNodeId").value(newRoot.getId()))
+                .andExpect(jsonPath("$.nodes[0].role").value("ROOT"))
+                .andExpect(jsonPath("$.nodes[1].networkNodeId").value(originalRoot.getId()))
+                .andExpect(jsonPath("$.nodes[1].role").value("AFFECTED"));
+
+        Incident updatedIncident = incidentRepository.findDetailedById(incidentId).orElseThrow();
+        List<IncidentTimeline> timeline = incidentTimelineRepository.findByIncidentIdOrderByCreatedAtAsc(incidentId);
+
+        assertThat(updatedIncident.getRootNode().getId()).isEqualTo(newRoot.getId());
+        assertThat(updatedIncident.getIncidentNodes())
+                .extracting(node -> node.getNetworkNode().getId() + ":" + node.getRole().name())
+                .containsExactlyInAnyOrder(
+                        newRoot.getId() + ":ROOT",
+                        originalRoot.getId() + ":AFFECTED"
+                );
+        assertThat(timeline).hasSize(2);
+        assertThat(timeline.getLast().getMessage()).isEqualTo("Incident updated: rootNodeId, nodes");
+    }
+
+    @Test
     void updateIncidentShouldReturnConflictForDuplicateIncidentNumber() throws Exception {
         NetworkNode rootNode = saveNode("CORE-RTR-LOD-01", NodeType.ROUTER, "LODZKIE");
         saveIncident("INC-110", "Existing incident", IncidentStatus.OPEN, IncidentPriority.HIGH, "LODZKIE", rootNode);
