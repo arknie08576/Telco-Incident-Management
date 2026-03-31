@@ -20,6 +20,10 @@ import org.springframework.context.annotation.Configuration;
                 @Tag(
                         name = "Incidents",
                         description = "Incident creation, lifecycle operations, timeline and filtered listing."
+                ),
+                @Tag(
+                        name = "Network Nodes",
+                        description = "Inventory lookup endpoints used by incident workflows."
                 )
         }
 )

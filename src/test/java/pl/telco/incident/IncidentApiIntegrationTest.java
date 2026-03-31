@@ -14,7 +14,10 @@ import pl.telco.incident.entity.NetworkNode;
 import pl.telco.incident.entity.enums.IncidentNodeRole;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
+import pl.telco.incident.entity.enums.IncidentTimelineEventType;
 import pl.telco.incident.entity.enums.NodeType;
+import pl.telco.incident.entity.enums.Region;
+import pl.telco.incident.entity.enums.SourceAlarmType;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.IncidentTimelineRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
@@ -95,8 +98,55 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
         assertThat(savedIncident.getStatus()).isEqualTo(IncidentStatus.OPEN);
         assertThat(savedIncident.getOpenedAt()).isNotNull();
         assertThat(timeline).hasSize(1);
-        assertThat(timeline.getFirst().getEventType()).isEqualTo("CREATED");
+        assertThat(timeline.getFirst().getEventType()).isEqualTo(IncidentTimelineEventType.CREATED);
         assertThat(timeline.getFirst().getMessage()).isEqualTo("Incident created");
+    }
+
+    @Test
+    void getIncidentByIdShouldReturnDetailedResponseWithNodes() throws Exception {
+        NetworkNode rootNode = saveNode("CORE-RTR-WAW-11", NodeType.ROUTER, "MAZOWIECKIE");
+        NetworkNode affectedNode = saveNode("RAN-GNB-WAW-11", NodeType.G_NODE_B, "MAZOWIECKIE");
+
+        String requestBody = """
+                {
+                  "incidentNumber": "INC-DETAIL-1",
+                  "title": "Detailed incident",
+                  "priority": "HIGH",
+                  "region": "MAZOWIECKIE",
+                  "sourceAlarmType": "HARDWARE",
+                  "possiblyPlanned": false,
+                  "rootNodeId": %d,
+                  "nodes": [
+                    {
+                      "networkNodeId": %d,
+                      "role": "ROOT"
+                    },
+                    {
+                      "networkNodeId": %d,
+                      "role": "AFFECTED"
+                    }
+                  ]
+                }
+                """.formatted(rootNode.getId(), rootNode.getId(), affectedNode.getId());
+
+        String responseBody = mockMvc.perform(post("/api/incidents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        Long incidentId = objectMapper.readTree(responseBody).get("id").asLong();
+
+        mockMvc.perform(get("/api/incidents/{id}", incidentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rootNodeId").value(rootNode.getId()))
+                .andExpect(jsonPath("$.sourceAlarmType").value("HARDWARE"))
+                .andExpect(jsonPath("$.possiblyPlanned").value(false))
+                .andExpect(jsonPath("$.nodes.length()").value(2))
+                .andExpect(jsonPath("$.nodes[0].networkNodeId").value(rootNode.getId()))
+                .andExpect(jsonPath("$.nodes[0].role").value("ROOT"));
     }
 
     @Test
@@ -290,7 +340,7 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
         assertThat(updatedIncident.getSourceAlarmType()).isEqualTo("POWER");
         assertThat(updatedIncident.getPossiblyPlanned()).isTrue();
         assertThat(timeline).hasSize(1);
-        assertThat(timeline.getFirst().getEventType()).isEqualTo("UPDATED");
+        assertThat(timeline.getFirst().getEventType()).isEqualTo(IncidentTimelineEventType.UPDATED);
         assertThat(timeline.getFirst().getMessage())
                 .isEqualTo("Incident updated: incidentNumber, title, priority, region, sourceAlarmType, possiblyPlanned");
     }
@@ -325,7 +375,7 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
                                   "title": "No-op incident",
                                   "priority": "HIGH",
                                   "region": "ZACHODNIOPOMORSKIE",
-                                  "sourceAlarmType": "TEST",
+                                  "sourceAlarmType": "HARDWARE",
                                   "possiblyPlanned": false
                                 }
                                 """))
@@ -386,7 +436,12 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
         assertThat(incident.getClosedAt()).isNotNull();
         assertThat(timeline).hasSize(4);
         assertThat(timeline.stream().map(IncidentTimeline::getEventType))
-                .containsExactly("CREATED", "ACKNOWLEDGED", "RESOLVED", "CLOSED");
+                .containsExactly(
+                        IncidentTimelineEventType.CREATED,
+                        IncidentTimelineEventType.ACKNOWLEDGED,
+                        IncidentTimelineEventType.RESOLVED,
+                        IncidentTimelineEventType.CLOSED
+                );
         assertThat(timeline.stream().map(IncidentTimeline::getMessage))
                 .containsExactly(
                         "Incident created",
@@ -442,6 +497,26 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
         mockMvc.perform(get("/api/incidents/{id}/timeline", 9999L))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Incident not found: 9999"));
+    }
+
+    @Test
+    void getNetworkNodesShouldFilterAndSortLookupData() throws Exception {
+        saveNode("CORE-RTR-WAW-21", NodeType.ROUTER, "MAZOWIECKIE");
+        saveNode("RAN-GNB-WAW-22", NodeType.G_NODE_B, "MAZOWIECKIE");
+        saveNode("CORE-SBC-KRK-21", NodeType.SBC, "MALOPOLSKIE");
+
+        mockMvc.perform(get("/api/network-nodes")
+                        .param("q", "WAW")
+                        .param("region", "mazowieckie")
+                        .param("active", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].nodeName").value("CORE-RTR-WAW-21"))
+                .andExpect(jsonPath("$[1].nodeName").value("RAN-GNB-WAW-22"));
+
+        mockMvc.perform(get("/api/network-nodes")
+                        .param("nodeType", "router"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].nodeType").value("ROUTER"));
     }
 
     @Test
@@ -761,7 +836,7 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
         NetworkNode node = NetworkNode.builder()
                 .nodeName(nodeName)
                 .nodeType(nodeType)
-                .region(region)
+                .region(Region.valueOf(region))
                 .vendor("TestVendor")
                 .active(true)
                 .build();
@@ -784,7 +859,7 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
                 priority,
                 region,
                 rootNode,
-                "TEST",
+                SourceAlarmType.HARDWARE.name(),
                 false,
                 LocalDateTime.now().minusHours(2),
                 status == IncidentStatus.ACKNOWLEDGED || status == IncidentStatus.RESOLVED || status == IncidentStatus.CLOSED
@@ -815,7 +890,7 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
                 priority,
                 region,
                 rootNode,
-                "TEST",
+                SourceAlarmType.HARDWARE.name(),
                 false,
                 openedAt,
                 status == IncidentStatus.ACKNOWLEDGED || status == IncidentStatus.RESOLVED || status == IncidentStatus.CLOSED
@@ -849,8 +924,8 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
                 .title(title)
                 .status(status)
                 .priority(priority)
-                .region(region)
-                .sourceAlarmType(sourceAlarmType)
+                .region(Region.valueOf(region))
+                .sourceAlarmType(SourceAlarmType.valueOf(sourceAlarmType))
                 .possiblyPlanned(possiblyPlanned)
                 .rootNode(rootNode)
                 .openedAt(openedAt)
@@ -870,7 +945,7 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
     private void saveTimelineEvent(Incident incident, String eventType, String message, LocalDateTime createdAt) {
         IncidentTimeline timeline = new IncidentTimeline();
         timeline.setIncident(incident);
-        timeline.setEventType(eventType);
+        timeline.setEventType(IncidentTimelineEventType.valueOf(eventType));
         timeline.setMessage(message);
         timeline.setCreatedAt(createdAt);
         incidentTimelineRepository.saveAndFlush(timeline);

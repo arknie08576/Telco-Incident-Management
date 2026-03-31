@@ -22,12 +22,15 @@ class OpenApiIntegrationTest extends AbstractPostgresIntegrationTest {
                 .andExpect(jsonPath("$.info.title").value("Telco Incident Management API"))
                 .andExpect(jsonPath("$.paths['/api/incidents'].post.summary").value("Create incident"))
                 .andExpect(jsonPath("$.paths['/api/incidents'].get.summary").value("List incidents"))
+                .andExpect(jsonPath("$.paths['/api/network-nodes'].get.summary").value("List network nodes"))
                 .andExpect(jsonPath("$.paths['/api/incidents'].get.parameters[*].name", hasItem("openedFrom")))
                 .andExpect(jsonPath("$.paths['/api/incidents'].get.parameters[*].name", hasItem("openedTo")))
                 .andExpect(jsonPath("$.paths['/api/incidents'].get.parameters[*].name", hasItem("priorities")))
                 .andExpect(jsonPath("$.paths['/api/incidents'].get.parameters[*].name", hasItem("statuses")))
                 .andExpect(jsonPath("$.paths['/api/incidents/{id}/timeline'].get.summary").value("Get incident timeline"))
                 .andExpect(jsonPath("$.components.schemas.IncidentCreateRequest.required", hasItem("incidentNumber")))
+                .andExpect(jsonPath("$.components.schemas.IncidentResponse.properties.nodes.type").value("array"))
+                .andExpect(jsonPath("$.components.schemas.IncidentSummaryResponse.properties.region.type").value("string"))
                 .andExpect(jsonPath("$.components.schemas.IncidentPageResponse.properties.totalElements.type").value("integer"))
                 .andExpect(jsonPath("$.components.schemas.ApiErrorResponse.properties.message.type").value("string"));
     }

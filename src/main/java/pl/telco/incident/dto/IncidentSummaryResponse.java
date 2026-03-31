@@ -1,17 +1,14 @@
 package pl.telco.incident.dto;
 
-import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.entity.enums.Region;
-import pl.telco.incident.entity.enums.SourceAlarmType;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
-@Schema(name = "IncidentResponse", description = "Detailed current state of an incident.")
-public class IncidentResponse {
+@Schema(name = "IncidentSummaryResponse", description = "Summary state of an incident used in paginated listings.")
+public class IncidentSummaryResponse {
 
     @Schema(description = "Database identifier.", example = "42")
     private Long id;
@@ -31,15 +28,6 @@ public class IncidentResponse {
     @Schema(description = "Affected network region.", example = "MAZOWIECKIE")
     private Region region;
 
-    @Schema(description = "Source alarm type reported by monitoring.", example = "HARDWARE", nullable = true)
-    private SourceAlarmType sourceAlarmType;
-
-    @Schema(description = "Marks whether the incident may be related to planned maintenance.", example = "false")
-    private Boolean possiblyPlanned;
-
-    @Schema(description = "Identifier of the root network node.", example = "1")
-    private Long rootNodeId;
-
     @Schema(description = "Timestamp when the incident was opened.", example = "2026-03-29T06:42:00")
     private LocalDateTime openedAt;
 
@@ -51,9 +39,6 @@ public class IncidentResponse {
 
     @Schema(description = "Timestamp when the incident was closed.", example = "2026-03-29T07:15:00", nullable = true)
     private LocalDateTime closedAt;
-
-    @ArraySchema(schema = @Schema(implementation = IncidentNodeResponse.class))
-    private List<IncidentNodeResponse> nodes;
 
     public Long getId() {
         return id;
@@ -103,30 +88,6 @@ public class IncidentResponse {
         this.region = region;
     }
 
-    public SourceAlarmType getSourceAlarmType() {
-        return sourceAlarmType;
-    }
-
-    public void setSourceAlarmType(SourceAlarmType sourceAlarmType) {
-        this.sourceAlarmType = sourceAlarmType;
-    }
-
-    public Boolean getPossiblyPlanned() {
-        return possiblyPlanned;
-    }
-
-    public void setPossiblyPlanned(Boolean possiblyPlanned) {
-        this.possiblyPlanned = possiblyPlanned;
-    }
-
-    public Long getRootNodeId() {
-        return rootNodeId;
-    }
-
-    public void setRootNodeId(Long rootNodeId) {
-        this.rootNodeId = rootNodeId;
-    }
-
     public LocalDateTime getOpenedAt() {
         return openedAt;
     }
@@ -157,13 +118,5 @@ public class IncidentResponse {
 
     public void setClosedAt(LocalDateTime closedAt) {
         this.closedAt = closedAt;
-    }
-
-    public List<IncidentNodeResponse> getNodes() {
-        return nodes;
-    }
-
-    public void setNodes(List<IncidentNodeResponse> nodes) {
-        this.nodes = nodes;
     }
 }

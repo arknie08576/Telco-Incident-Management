@@ -1,5 +1,7 @@
 package pl.telco.incident.service;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.logstash.logback.argument.StructuredArguments;
@@ -13,7 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.IncidentActionRequest;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentNodeRequest;
+import pl.telco.incident.dto.IncidentNodeResponse;
 import pl.telco.incident.dto.IncidentResponse;
+import pl.telco.incident.dto.IncidentSummaryResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
 import pl.telco.incident.dto.IncidentUpdateRequest;
 import pl.telco.incident.entity.Incident;
@@ -23,6 +27,9 @@ import pl.telco.incident.entity.NetworkNode;
 import pl.telco.incident.entity.enums.IncidentNodeRole;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
+import pl.telco.incident.entity.enums.IncidentTimelineEventType;
+import pl.telco.incident.entity.enums.Region;
+import pl.telco.incident.entity.enums.SourceAlarmType;
 import pl.telco.incident.exception.BadRequestException;
 import pl.telco.incident.exception.ConflictException;
 import pl.telco.incident.exception.ResourceNotFoundException;
@@ -30,6 +37,7 @@ import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.IncidentTimelineRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -40,7 +48,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
+import static pl.telco.incident.repository.specification.IncidentSpecifications.acknowledgedAtFrom;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.acknowledgedAtTo;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.closedAtFrom;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.closedAtTo;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasPossiblyPlanned;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasPriorities;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.hasRegion;
@@ -49,22 +63,14 @@ import static pl.telco.incident.repository.specification.IncidentSpecifications.
 import static pl.telco.incident.repository.specification.IncidentSpecifications.incidentNumberContains;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.openedAtFrom;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.openedAtTo;
-import static pl.telco.incident.repository.specification.IncidentSpecifications.titleContains;
-import static pl.telco.incident.repository.specification.IncidentSpecifications.acknowledgedAtFrom;
-import static pl.telco.incident.repository.specification.IncidentSpecifications.acknowledgedAtTo;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.resolvedAtFrom;
 import static pl.telco.incident.repository.specification.IncidentSpecifications.resolvedAtTo;
-import static pl.telco.incident.repository.specification.IncidentSpecifications.closedAtFrom;
-import static pl.telco.incident.repository.specification.IncidentSpecifications.closedAtTo;
+import static pl.telco.incident.repository.specification.IncidentSpecifications.titleContains;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class IncidentService {
-
-    private final IncidentRepository incidentRepository;
-    private final NetworkNodeRepository networkNodeRepository;
-    private final IncidentTimelineRepository incidentTimelineRepository;
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "openedAt",
@@ -82,20 +88,27 @@ public class IncidentService {
             "closedAt"
     );
 
+    private final IncidentRepository incidentRepository;
+    private final NetworkNodeRepository networkNodeRepository;
+    private final IncidentTimelineRepository incidentTimelineRepository;
+    private final MeterRegistry meterRegistry;
+
     @Transactional
     public IncidentResponse createIncident(IncidentCreateRequest request) {
-        validateIncidentNumberUniqueness(request.getIncidentNumber());
+        validateIncidentNumberUniqueness(normalize(request.getIncidentNumber()));
         validateNodeUniqueness(request);
         validateRootNodeConsistency(request);
 
-        NetworkNode rootNode = networkNodeRepository.findById(request.getRootNodeId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Root node not found: " + request.getRootNodeId()
-                ));
+        Map<Long, NetworkNode> nodesById = loadRequestedNodes(request);
+        NetworkNode rootNode = nodesById.get(request.getRootNodeId());
+
+        if (rootNode == null) {
+            throw new ResourceNotFoundException("Root node not found: " + request.getRootNodeId());
+        }
 
         Incident incident = new Incident();
-        incident.setIncidentNumber(request.getIncidentNumber());
-        incident.setTitle(request.getTitle());
+        incident.setIncidentNumber(normalize(request.getIncidentNumber()));
+        incident.setTitle(normalize(request.getTitle()));
         incident.setPriority(request.getPriority());
         incident.setRegion(request.getRegion());
         incident.setSourceAlarmType(request.getSourceAlarmType());
@@ -103,46 +116,42 @@ public class IncidentService {
         incident.setRootNode(rootNode);
 
         for (IncidentNodeRequest nodeRequest : request.getNodes()) {
-            NetworkNode networkNode = networkNodeRepository.findById(nodeRequest.getNetworkNodeId())
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            "Network node not found: " + nodeRequest.getNetworkNodeId()
-                    ));
+            NetworkNode networkNode = nodesById.get(nodeRequest.getNetworkNodeId());
+
+            if (networkNode == null) {
+                throw new ResourceNotFoundException("Network node not found: " + nodeRequest.getNetworkNodeId());
+            }
 
             IncidentNode incidentNode = new IncidentNode();
             incidentNode.setNetworkNode(networkNode);
             incidentNode.setRole(nodeRequest.getRole());
-
             incident.addIncidentNode(incidentNode);
         }
 
         Incident saved = incidentRepository.save(incident);
 
-        addTimelineEvent(
-                saved,
-                "CREATED",
-                "Incident created"
-        );
+        addTimelineEvent(saved, IncidentTimelineEventType.CREATED, "Incident created");
+        recordIncidentCreated(saved);
+        logIncidentBusinessEvent("create", IncidentTimelineEventType.CREATED, saved, null, null, false);
 
-        logIncidentBusinessEvent("create", "CREATED", saved, null, null, false);
-
-        return mapToResponse(saved);
+        return mapToDetailedResponse(saved);
     }
 
     @Transactional(readOnly = true)
-    public Page<IncidentResponse> getAllIncidents(
+    public Page<IncidentSummaryResponse> getAllIncidents(
             int page,
             int size,
             String sortBy,
             String direction,
             IncidentPriority priority,
             List<String> priorities,
-            String region,
+            Region region,
             Boolean possiblyPlanned,
             IncidentStatus status,
             List<String> statuses,
             String incidentNumber,
             String title,
-            String sourceAlarmType,
+            SourceAlarmType sourceAlarmType,
             LocalDateTime openedFrom,
             LocalDateTime openedTo,
             LocalDateTime acknowledgedFrom,
@@ -182,13 +191,12 @@ public class IncidentService {
                 .and(withSort(sortBy, sortDirection));
 
         return incidentRepository.findAll(specification, pageable)
-                .map(this::mapToResponse);
+                .map(this::mapToSummaryResponse);
     }
 
     @Transactional(readOnly = true)
     public IncidentResponse getIncidentById(Long id) {
-        Incident incident = findIncidentByIdOrThrow(id);
-        return mapToResponse(incident);
+        return mapToDetailedResponse(findDetailedIncidentByIdOrThrow(id));
     }
 
     @Transactional
@@ -204,7 +212,7 @@ public class IncidentService {
         applyStringUpdate(
                 request.getIncidentNumber(),
                 incident.getIncidentNumber(),
-                this::validateIncidentNumberUniquenessForUpdate,
+                value -> validateIncidentNumberUniquenessForUpdate(value, incident.getId()),
                 incident::setIncidentNumber,
                 "incidentNumber",
                 changedFields
@@ -212,24 +220,17 @@ public class IncidentService {
         applyStringUpdate(
                 request.getTitle(),
                 incident.getTitle(),
-                value -> { },
+                value -> {
+                },
                 incident::setTitle,
                 "title",
                 changedFields
         );
         applyObjectUpdate(request.getPriority(), incident.getPriority(), incident::setPriority, "priority", changedFields);
-        applyStringUpdate(
-                request.getRegion(),
-                incident.getRegion(),
-                value -> { },
-                incident::setRegion,
-                "region",
-                changedFields
-        );
-        applyStringUpdate(
+        applyObjectUpdate(request.getRegion(), incident.getRegion(), incident::setRegion, "region", changedFields);
+        applyObjectUpdate(
                 request.getSourceAlarmType(),
                 incident.getSourceAlarmType(),
-                value -> { },
                 incident::setSourceAlarmType,
                 "sourceAlarmType",
                 changedFields
@@ -247,11 +248,12 @@ public class IncidentService {
         }
 
         Incident saved = incidentRepository.save(incident);
-        addTimelineEvent(saved, "UPDATED", buildUpdateMessage(changedFields));
+        addTimelineEvent(saved, IncidentTimelineEventType.UPDATED, buildUpdateMessage(changedFields));
 
-        logIncidentBusinessEvent("update", "UPDATED", saved, null, changedFields, false);
+        recordIncidentUpdated(saved, changedFields);
+        logIncidentBusinessEvent("update", IncidentTimelineEventType.UPDATED, saved, null, changedFields, false);
 
-        return mapToResponse(saved);
+        return mapToDetailedResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -267,83 +269,114 @@ public class IncidentService {
     public IncidentResponse acknowledgeIncident(Long id, IncidentActionRequest request) {
         Incident incident = findIncidentByIdOrThrow(id);
 
-        validateStatusTransition(
-                incident,
-                IncidentStatus.OPEN,
-                "Only OPEN incidents can be acknowledged"
-        );
+        validateStatusTransition(incident, IncidentStatus.OPEN, "Only OPEN incidents can be acknowledged");
 
         incident.setStatus(IncidentStatus.ACKNOWLEDGED);
         incident.setAcknowledgedAt(LocalDateTime.now());
 
         Incident saved = incidentRepository.save(incident);
 
-        addTimelineEvent(
-                saved,
-                "ACKNOWLEDGED",
-                buildLifecycleMessage("Incident acknowledged", request)
-        );
+        addTimelineEvent(saved, IncidentTimelineEventType.ACKNOWLEDGED, buildLifecycleMessage("Incident acknowledged", request));
+        recordLifecycleTransition("acknowledge", IncidentTimelineEventType.ACKNOWLEDGED, saved);
+        logIncidentBusinessEvent("acknowledge", IncidentTimelineEventType.ACKNOWLEDGED, saved, IncidentStatus.OPEN, null, hasNote(request));
 
-        logIncidentBusinessEvent("acknowledge", "ACKNOWLEDGED", saved, IncidentStatus.OPEN, null, hasNote(request));
-
-        return mapToResponse(saved);
+        return mapToDetailedResponse(saved);
     }
 
     @Transactional
     public IncidentResponse resolveIncident(Long id, IncidentActionRequest request) {
         Incident incident = findIncidentByIdOrThrow(id);
 
-        validateStatusTransition(
-                incident,
-                IncidentStatus.ACKNOWLEDGED,
-                "Only ACKNOWLEDGED incidents can be resolved"
-        );
+        validateStatusTransition(incident, IncidentStatus.ACKNOWLEDGED, "Only ACKNOWLEDGED incidents can be resolved");
 
         incident.setStatus(IncidentStatus.RESOLVED);
         incident.setResolvedAt(LocalDateTime.now());
 
         Incident saved = incidentRepository.save(incident);
 
-        addTimelineEvent(
-                saved,
-                "RESOLVED",
-                buildLifecycleMessage("Incident resolved", request)
-        );
+        addTimelineEvent(saved, IncidentTimelineEventType.RESOLVED, buildLifecycleMessage("Incident resolved", request));
+        recordLifecycleTransition("resolve", IncidentTimelineEventType.RESOLVED, saved);
+        logIncidentBusinessEvent("resolve", IncidentTimelineEventType.RESOLVED, saved, IncidentStatus.ACKNOWLEDGED, null, hasNote(request));
 
-        logIncidentBusinessEvent("resolve", "RESOLVED", saved, IncidentStatus.ACKNOWLEDGED, null, hasNote(request));
-
-        return mapToResponse(saved);
+        return mapToDetailedResponse(saved);
     }
 
     @Transactional
     public IncidentResponse closeIncident(Long id, IncidentActionRequest request) {
         Incident incident = findIncidentByIdOrThrow(id);
 
-        validateStatusTransition(
-                incident,
-                IncidentStatus.RESOLVED,
-                "Only RESOLVED incidents can be closed"
-        );
+        validateStatusTransition(incident, IncidentStatus.RESOLVED, "Only RESOLVED incidents can be closed");
 
         incident.setStatus(IncidentStatus.CLOSED);
         incident.setClosedAt(LocalDateTime.now());
 
         Incident saved = incidentRepository.save(incident);
 
-        addTimelineEvent(
-                saved,
-                "CLOSED",
-                buildLifecycleMessage("Incident closed", request)
-        );
+        addTimelineEvent(saved, IncidentTimelineEventType.CLOSED, buildLifecycleMessage("Incident closed", request));
+        recordLifecycleTransition("close", IncidentTimelineEventType.CLOSED, saved);
+        logIncidentBusinessEvent("close", IncidentTimelineEventType.CLOSED, saved, IncidentStatus.RESOLVED, null, hasNote(request));
 
-        logIncidentBusinessEvent("close", "CLOSED", saved, IncidentStatus.RESOLVED, null, hasNote(request));
+        return mapToDetailedResponse(saved);
+    }
 
-        return mapToResponse(saved);
+    private void recordIncidentCreated(Incident incident) {
+        meterRegistry.counter(
+                "incident.created",
+                "priority", incident.getPriority().name(),
+                "region", incident.getRegion().name()
+        ).increment();
+    }
+
+    private void recordIncidentUpdated(Incident incident, List<String> changedFields) {
+        meterRegistry.counter(
+                "incident.updated",
+                "priority", incident.getPriority().name(),
+                "region", incident.getRegion().name()
+        ).increment();
+
+        meterRegistry.summary("incident.updated.changed_fields").record(changedFields.size());
+    }
+
+    private void recordLifecycleTransition(String action, IncidentTimelineEventType eventType, Incident incident) {
+        meterRegistry.counter(
+                "incident.lifecycle.transition",
+                "action", action,
+                "eventType", eventType.name(),
+                "priority", incident.getPriority().name(),
+                "region", incident.getRegion().name(),
+                "status", incident.getStatus().name()
+        ).increment();
+
+        if (incident.getOpenedAt() == null) {
+            return;
+        }
+
+        switch (eventType) {
+            case ACKNOWLEDGED -> recordDuration("incident.time.to_ack", incident.getOpenedAt(), incident.getAcknowledgedAt(), incident);
+            case RESOLVED -> recordDuration("incident.time.to_resolve", incident.getOpenedAt(), incident.getResolvedAt(), incident);
+            case CLOSED -> recordDuration("incident.time.to_close", incident.getOpenedAt(), incident.getClosedAt(), incident);
+            default -> {
+            }
+        }
+    }
+
+    private void recordDuration(String metricName, LocalDateTime startedAt, LocalDateTime finishedAt, Incident incident) {
+        if (startedAt == null || finishedAt == null || finishedAt.isBefore(startedAt)) {
+            return;
+        }
+
+        Timer.builder(metricName)
+                .tags(
+                        "priority", incident.getPriority().name(),
+                        "region", incident.getRegion().name()
+                )
+                .register(meterRegistry)
+                .record(Duration.between(startedAt, finishedAt));
     }
 
     private void logIncidentBusinessEvent(
             String eventAction,
-            String timelineEventType,
+            IncidentTimelineEventType timelineEventType,
             Incident incident,
             IncidentStatus previousStatus,
             List<String> changedFields,
@@ -374,29 +407,40 @@ public class IncidentService {
         log.info("incident_event {}", StructuredArguments.entries(fields));
     }
 
-    private Incident findIncidentByIdOrThrow(Long id) {
-        return incidentRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Incident not found: " + id
-                ));
+    private Incident findDetailedIncidentByIdOrThrow(Long id) {
+        return incidentRepository.findDetailedById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Incident not found: " + id));
     }
 
-    private void validateStatusTransition(
-            Incident incident,
-            IncidentStatus expectedCurrentStatus,
-            String errorMessage
-    ) {
+    private Incident findIncidentByIdOrThrow(Long id) {
+        return incidentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Incident not found: " + id));
+    }
+
+    private Map<Long, NetworkNode> loadRequestedNodes(IncidentCreateRequest request) {
+        Set<Long> requestedNodeIds = request.getNodes().stream()
+                .map(IncidentNodeRequest::getNetworkNodeId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (request.getRootNodeId() != null) {
+            requestedNodeIds.add(request.getRootNodeId());
+        }
+
+        return networkNodeRepository.findAllById(requestedNodeIds).stream()
+                .collect(Collectors.toMap(NetworkNode::getId, node -> node));
+    }
+
+    private void validateStatusTransition(Incident incident, IncidentStatus expectedCurrentStatus, String errorMessage) {
         if (incident.getStatus() != expectedCurrentStatus) {
             throw new BadRequestException(errorMessage);
         }
     }
 
-    private void addTimelineEvent(Incident incident, String eventType, String message) {
+    private void addTimelineEvent(Incident incident, IncidentTimelineEventType eventType, String message) {
         IncidentTimeline timeline = new IncidentTimeline();
         timeline.setIncident(incident);
         timeline.setEventType(eventType);
         timeline.setMessage(message);
-
         incidentTimelineRepository.save(timeline);
     }
 
@@ -418,8 +462,9 @@ public class IncidentService {
         }
     }
 
-    private void validateIncidentNumberUniquenessForUpdate(String incidentNumber) {
+    private void validateIncidentNumberUniquenessForUpdate(String incidentNumber, Long incidentId) {
         incidentRepository.findByIncidentNumber(incidentNumber)
+                .filter(existingIncident -> !existingIncident.getId().equals(incidentId))
                 .ifPresent(existingIncident -> {
                     throw new ConflictException("Incident with number already exists: " + incidentNumber);
                 });
@@ -430,9 +475,7 @@ public class IncidentService {
 
         for (IncidentNodeRequest nodeRequest : request.getNodes()) {
             if (!uniqueNodeIds.add(nodeRequest.getNetworkNodeId())) {
-                throw new BadRequestException(
-                        "Duplicate networkNodeId in nodes: " + nodeRequest.getNetworkNodeId()
-                );
+                throw new BadRequestException("Duplicate networkNodeId in nodes: " + nodeRequest.getNetworkNodeId());
             }
         }
     }
@@ -482,22 +525,14 @@ public class IncidentService {
         }
 
         boolean rootMatches = request.getNodes().stream()
-                .anyMatch(node ->
-                        node.getRole() == IncidentNodeRole.ROOT
-                                && request.getRootNodeId().equals(node.getNetworkNodeId())
-                );
+                .anyMatch(node -> node.getRole() == IncidentNodeRole.ROOT && request.getRootNodeId().equals(node.getNetworkNodeId()));
 
         if (!rootMatches) {
             throw new BadRequestException("rootNodeId must match the node with role ROOT");
         }
     }
 
-    private void validateDateRange(
-            String fromFieldName,
-            LocalDateTime from,
-            String toFieldName,
-            LocalDateTime to
-    ) {
+    private void validateDateRange(String fromFieldName, LocalDateTime from, String toFieldName, LocalDateTime to) {
         if (from != null && to != null && from.isAfter(to)) {
             throw new BadRequestException(fromFieldName + " must be earlier than or equal to " + toFieldName);
         }
@@ -525,11 +560,7 @@ public class IncidentService {
         return merged;
     }
 
-    private <E extends Enum<E>> Set<E> parseEnumFilters(
-            List<String> rawValues,
-            Class<E> enumType,
-            String parameterName
-    ) {
+    private <E extends Enum<E>> Set<E> parseEnumFilters(List<String> rawValues, Class<E> enumType, String parameterName) {
         LinkedHashSet<E> parsedValues = new LinkedHashSet<>();
 
         if (rawValues == null) {
@@ -551,9 +582,7 @@ public class IncidentService {
                 try {
                     parsedValues.add(Enum.valueOf(enumType, normalizedToken.toUpperCase(Locale.ROOT)));
                 } catch (IllegalArgumentException ex) {
-                    throw new BadRequestException(
-                            "Invalid value '%s' for parameter '%s'".formatted(normalizedToken, parameterName)
-                    );
+                    throw new BadRequestException("Invalid value '%s' for parameter '%s'".formatted(normalizedToken, parameterName));
                 }
             }
         }
@@ -564,8 +593,8 @@ public class IncidentService {
     private void applyStringUpdate(
             String requestedValue,
             String currentValue,
-            java.util.function.Consumer<String> validator,
-            java.util.function.Consumer<String> updater,
+            Consumer<String> validator,
+            Consumer<String> updater,
             String fieldName,
             List<String> changedFields
     ) {
@@ -573,7 +602,7 @@ public class IncidentService {
             return;
         }
 
-        String normalizedValue = requestedValue.trim();
+        String normalizedValue = normalize(requestedValue);
 
         if (Objects.equals(normalizedValue, currentValue)) {
             return;
@@ -584,13 +613,7 @@ public class IncidentService {
         changedFields.add(fieldName);
     }
 
-    private <T> void applyObjectUpdate(
-            T requestedValue,
-            T currentValue,
-            java.util.function.Consumer<T> updater,
-            String fieldName,
-            List<String> changedFields
-    ) {
+    private <T> void applyObjectUpdate(T requestedValue, T currentValue, Consumer<T> updater, String fieldName, List<String> changedFields) {
         if (requestedValue == null || Objects.equals(requestedValue, currentValue)) {
             return;
         }
@@ -599,12 +622,16 @@ public class IncidentService {
         changedFields.add(fieldName);
     }
 
+    private String normalize(String value) {
+        return value == null ? null : value.trim();
+    }
+
     private String buildUpdateMessage(List<String> changedFields) {
         return "Incident updated: " + String.join(", ", changedFields);
     }
 
-    private IncidentResponse mapToResponse(Incident incident) {
-        IncidentResponse response = new IncidentResponse();
+    private IncidentSummaryResponse mapToSummaryResponse(Incident incident) {
+        IncidentSummaryResponse response = new IncidentSummaryResponse();
         response.setId(incident.getId());
         response.setIncidentNumber(incident.getIncidentNumber());
         response.setTitle(incident.getTitle());
@@ -615,6 +642,37 @@ public class IncidentService {
         response.setAcknowledgedAt(incident.getAcknowledgedAt());
         response.setResolvedAt(incident.getResolvedAt());
         response.setClosedAt(incident.getClosedAt());
+        return response;
+    }
+
+    private IncidentResponse mapToDetailedResponse(Incident incident) {
+        IncidentResponse response = new IncidentResponse();
+        response.setId(incident.getId());
+        response.setIncidentNumber(incident.getIncidentNumber());
+        response.setTitle(incident.getTitle());
+        response.setStatus(incident.getStatus());
+        response.setPriority(incident.getPriority());
+        response.setRegion(incident.getRegion());
+        response.setSourceAlarmType(incident.getSourceAlarmType());
+        response.setPossiblyPlanned(incident.getPossiblyPlanned());
+        response.setRootNodeId(incident.getRootNode() != null ? incident.getRootNode().getId() : null);
+        response.setOpenedAt(incident.getOpenedAt());
+        response.setAcknowledgedAt(incident.getAcknowledgedAt());
+        response.setResolvedAt(incident.getResolvedAt());
+        response.setClosedAt(incident.getClosedAt());
+        response.setNodes(incident.getIncidentNodes().stream().map(this::mapIncidentNodeToResponse).toList());
+        return response;
+    }
+
+    private IncidentNodeResponse mapIncidentNodeToResponse(IncidentNode incidentNode) {
+        IncidentNodeResponse response = new IncidentNodeResponse();
+        response.setNetworkNodeId(incidentNode.getNetworkNode().getId());
+        response.setNodeName(incidentNode.getNetworkNode().getNodeName());
+        response.setRole(incidentNode.getRole());
+        response.setNodeType(incidentNode.getNetworkNode().getNodeType());
+        response.setRegion(incidentNode.getNetworkNode().getRegion());
+        response.setVendor(incidentNode.getNetworkNode().getVendor());
+        response.setActive(incidentNode.getNetworkNode().getActive());
         return response;
     }
 

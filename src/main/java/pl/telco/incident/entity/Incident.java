@@ -3,6 +3,8 @@ package pl.telco.incident.entity;
 import jakarta.persistence.*;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
+import pl.telco.incident.entity.enums.Region;
+import pl.telco.incident.entity.enums.SourceAlarmType;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -34,11 +36,13 @@ public class Incident {
     @Column(name = "priority", nullable = false, length = 30)
     private IncidentPriority priority;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "source_alarm_type", length = 50)
-    private String sourceAlarmType;
+    private SourceAlarmType sourceAlarmType;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "region", nullable = false, length = 100)
-    private String region;
+    private Region region;
 
     @Column(name = "is_possibly_planned", nullable = false)
     private Boolean possiblyPlanned;
@@ -61,6 +65,10 @@ public class Incident {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @OneToMany(mappedBy = "incident", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<IncidentNode> incidentNodes = new ArrayList<>();
 
@@ -68,9 +76,9 @@ public class Incident {
     }
 
     public Incident(Long id, String incidentNumber, NetworkNode rootNode, String title, IncidentStatus status,
-                    IncidentPriority priority, String sourceAlarmType, String region, Boolean possiblyPlanned,
+                    IncidentPriority priority, SourceAlarmType sourceAlarmType, Region region, Boolean possiblyPlanned,
                     LocalDateTime openedAt, LocalDateTime acknowledgedAt, LocalDateTime resolvedAt,
-                    LocalDateTime closedAt, LocalDateTime createdAt, LocalDateTime updatedAt,
+                    LocalDateTime closedAt, LocalDateTime createdAt, LocalDateTime updatedAt, Long version,
                     List<IncidentNode> incidentNodes) {
         this.id = id;
         this.incidentNumber = incidentNumber;
@@ -87,6 +95,7 @@ public class Incident {
         this.closedAt = closedAt;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.version = version;
         this.incidentNodes = incidentNodes != null ? incidentNodes : new ArrayList<>();
     }
 
@@ -99,6 +108,9 @@ public class Incident {
         }
         if (updatedAt == null) {
             updatedAt = now;
+        }
+        if (version == null) {
+            version = 0L;
         }
         if (openedAt == null) {
             openedAt = now;
@@ -173,19 +185,19 @@ public class Incident {
         this.priority = priority;
     }
 
-    public String getSourceAlarmType() {
+    public SourceAlarmType getSourceAlarmType() {
         return sourceAlarmType;
     }
 
-    public void setSourceAlarmType(String sourceAlarmType) {
+    public void setSourceAlarmType(SourceAlarmType sourceAlarmType) {
         this.sourceAlarmType = sourceAlarmType;
     }
 
-    public String getRegion() {
+    public Region getRegion() {
         return region;
     }
 
-    public void setRegion(String region) {
+    public void setRegion(Region region) {
         this.region = region;
     }
 
@@ -245,6 +257,14 @@ public class Incident {
         this.updatedAt = updatedAt;
     }
 
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
+    }
+
     public List<IncidentNode> getIncidentNodes() {
         return incidentNodes;
     }
@@ -260,8 +280,8 @@ public class Incident {
         private String title;
         private IncidentStatus status;
         private IncidentPriority priority;
-        private String sourceAlarmType;
-        private String region;
+        private SourceAlarmType sourceAlarmType;
+        private Region region;
         private Boolean possiblyPlanned;
         private LocalDateTime openedAt;
         private LocalDateTime acknowledgedAt;
@@ -269,6 +289,7 @@ public class Incident {
         private LocalDateTime closedAt;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
+        private Long version;
         private List<IncidentNode> incidentNodes = new ArrayList<>();
 
         private IncidentBuilder() {
@@ -304,12 +325,12 @@ public class Incident {
             return this;
         }
 
-        public IncidentBuilder sourceAlarmType(String sourceAlarmType) {
+        public IncidentBuilder sourceAlarmType(SourceAlarmType sourceAlarmType) {
             this.sourceAlarmType = sourceAlarmType;
             return this;
         }
 
-        public IncidentBuilder region(String region) {
+        public IncidentBuilder region(Region region) {
             this.region = region;
             return this;
         }
@@ -349,6 +370,11 @@ public class Incident {
             return this;
         }
 
+        public IncidentBuilder version(Long version) {
+            this.version = version;
+            return this;
+        }
+
         public IncidentBuilder incidentNodes(List<IncidentNode> incidentNodes) {
             this.incidentNodes = incidentNodes != null ? incidentNodes : new ArrayList<>();
             return this;
@@ -356,7 +382,7 @@ public class Incident {
 
         public Incident build() {
             return new Incident(id, incidentNumber, rootNode, title, status, priority, sourceAlarmType, region,
-                    possiblyPlanned, openedAt, acknowledgedAt, resolvedAt, closedAt, createdAt, updatedAt, incidentNodes);
+                    possiblyPlanned, openedAt, acknowledgedAt, resolvedAt, closedAt, createdAt, updatedAt, version, incidentNodes);
         }
     }
 }

@@ -4,6 +4,8 @@ import org.springframework.data.jpa.domain.Specification;
 import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
+import pl.telco.incident.entity.enums.Region;
+import pl.telco.incident.entity.enums.SourceAlarmType;
 
 import java.time.LocalDateTime;
 import java.util.Set;
@@ -23,11 +25,9 @@ public final class IncidentSpecifications {
                 (priorities == null || priorities.isEmpty()) ? null : root.get("priority").in(priorities);
     }
 
-    public static Specification<Incident> hasRegion(String region) {
+    public static Specification<Incident> hasRegion(Region region) {
         return (root, query, cb) ->
-                (region == null || region.isBlank())
-                        ? null
-                        : cb.equal(cb.lower(root.get("region")), region.trim().toLowerCase());
+                region == null ? null : cb.equal(root.get("region"), region);
     }
 
     public static Specification<Incident> hasPossiblyPlanned(Boolean possiblyPlanned) {
@@ -65,14 +65,9 @@ public final class IncidentSpecifications {
                 );
     }
 
-    public static Specification<Incident> hasSourceAlarmType(String sourceAlarmType) {
+    public static Specification<Incident> hasSourceAlarmType(SourceAlarmType sourceAlarmType) {
         return (root, query, cb) ->
-                (sourceAlarmType == null || sourceAlarmType.isBlank())
-                        ? null
-                        : cb.equal(
-                        cb.lower(root.get("sourceAlarmType")),
-                        sourceAlarmType.trim().toLowerCase()
-                );
+                sourceAlarmType == null ? null : cb.equal(root.get("sourceAlarmType"), sourceAlarmType);
     }
 
     public static Specification<Incident> openedAtFrom(LocalDateTime openedFrom) {

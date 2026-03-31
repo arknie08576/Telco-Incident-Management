@@ -9,6 +9,8 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import pl.telco.incident.entity.enums.IncidentPriority;
+import pl.telco.incident.entity.enums.Region;
+import pl.telco.incident.entity.enums.SourceAlarmType;
 
 import java.util.List;
 
@@ -30,13 +32,11 @@ public class IncidentCreateRequest {
     private IncidentPriority priority;
 
     @Schema(description = "Affected network region.", example = "MAZOWIECKIE")
-    @NotBlank(message = "region is required")
-    @Size(max = 100, message = "region must not exceed 100 characters")
-    private String region;
+    @NotNull(message = "region is required")
+    private Region region;
 
     @Schema(description = "Source alarm type reported by monitoring.", example = "HARDWARE")
-    @Size(max = 50, message = "sourceAlarmType must not exceed 50 characters")
-    private String sourceAlarmType;
+    private SourceAlarmType sourceAlarmType;
 
     @Schema(description = "Marks whether the incident may be related to planned maintenance.", example = "false")
     private Boolean possiblyPlanned;
@@ -79,19 +79,19 @@ public class IncidentCreateRequest {
         this.priority = priority;
     }
 
-    public String getRegion() {
+    public Region getRegion() {
         return region;
     }
 
-    public void setRegion(String region) {
+    public void setRegion(Region region) {
         this.region = region;
     }
 
-    public String getSourceAlarmType() {
+    public SourceAlarmType getSourceAlarmType() {
         return sourceAlarmType;
     }
 
-    public void setSourceAlarmType(String sourceAlarmType) {
+    public void setSourceAlarmType(SourceAlarmType sourceAlarmType) {
         this.sourceAlarmType = sourceAlarmType;
     }
 

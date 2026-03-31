@@ -2,6 +2,7 @@ package pl.telco.incident.entity;
 
 import jakarta.persistence.*;
 import pl.telco.incident.entity.enums.NodeType;
+import pl.telco.incident.entity.enums.Region;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -22,8 +23,9 @@ public class NetworkNode {
     @Column(name = "node_type", nullable = false, length = 50)
     private NodeType nodeType;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "region", nullable = false, length = 100)
-    private String region;
+    private Region region;
 
     @Column(name = "vendor", length = 100)
     private String vendor;
@@ -40,7 +42,7 @@ public class NetworkNode {
     public NetworkNode() {
     }
 
-    public NetworkNode(Long id, String nodeName, NodeType nodeType, String region, String vendor, Boolean active,
+    public NetworkNode(Long id, String nodeName, NodeType nodeType, Region region, String vendor, Boolean active,
                        LocalDateTime createdAt, List<Incident> rootIncidents) {
         this.id = id;
         this.nodeName = nodeName;
@@ -90,11 +92,11 @@ public class NetworkNode {
         this.nodeType = nodeType;
     }
 
-    public String getRegion() {
+    public Region getRegion() {
         return region;
     }
 
-    public void setRegion(String region) {
+    public void setRegion(Region region) {
         this.region = region;
     }
 
@@ -134,7 +136,7 @@ public class NetworkNode {
         private Long id;
         private String nodeName;
         private NodeType nodeType;
-        private String region;
+        private Region region;
         private String vendor;
         private Boolean active;
         private LocalDateTime createdAt;
@@ -158,7 +160,7 @@ public class NetworkNode {
             return this;
         }
 
-        public NetworkNodeBuilder region(String region) {
+        public NetworkNodeBuilder region(Region region) {
             this.region = region;
             return this;
         }

@@ -57,7 +57,7 @@ services:
       logstash:
         condition: service_started
     environment:
-      SPRING_PROFILES_ACTIVE: elk
+      SPRING_PROFILES_ACTIVE: dev,elk
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/telco_incident_db
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres

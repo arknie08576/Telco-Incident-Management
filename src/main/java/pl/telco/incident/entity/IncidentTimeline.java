@@ -1,6 +1,7 @@
 package pl.telco.incident.entity;
 
 import jakarta.persistence.*;
+import pl.telco.incident.entity.enums.IncidentTimelineEventType;
 
 import java.time.LocalDateTime;
 
@@ -16,8 +17,9 @@ public class IncidentTimeline {
     @JoinColumn(name = "incident_id", nullable = false)
     private Incident incident;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "event_type", nullable = false, length = 50)
-    private String eventType;
+    private IncidentTimelineEventType eventType;
 
     @Column(name = "message", nullable = false, columnDefinition = "TEXT")
     private String message;
@@ -44,11 +46,11 @@ public class IncidentTimeline {
         this.incident = incident;
     }
 
-    public String getEventType() {
+    public IncidentTimelineEventType getEventType() {
         return eventType;
     }
 
-    public void setEventType(String eventType) {
+    public void setEventType(IncidentTimelineEventType eventType) {
         this.eventType = eventType;
     }
 

@@ -1,24 +1,29 @@
 package pl.telco.incident.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import pl.telco.incident.config.CaseInsensitiveEnumConverterFactory;
 import pl.telco.incident.config.RequestCorrelationFilter;
-import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentActionRequest;
+import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentResponse;
+import pl.telco.incident.dto.IncidentSummaryResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
 import pl.telco.incident.dto.IncidentUpdateRequest;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
+import pl.telco.incident.entity.enums.Region;
+import pl.telco.incident.entity.enums.SourceAlarmType;
 import pl.telco.incident.exception.BadRequestException;
 import pl.telco.incident.exception.ConflictException;
 import pl.telco.incident.exception.GlobalExceptionHandler;
@@ -42,6 +47,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import({
         GlobalExceptionHandler.class,
         RequestCorrelationFilter.class,
+        CaseInsensitiveEnumConverterFactory.class,
         IncidentControllerWebMvcTest.TestConfig.class
 })
 class IncidentControllerWebMvcTest {
@@ -61,7 +67,6 @@ class IncidentControllerWebMvcTest {
                 {
                   "incidentNumber": "",
                   "title": "",
-                  "region": "",
                   "rootNodeId": 0,
                   "nodes": []
                 }
@@ -125,19 +130,18 @@ class IncidentControllerWebMvcTest {
     }
 
     @Test
+    void getAllIncidentsShouldAcceptLowercaseRegionFilter() throws Exception {
+        mockMvc.perform(get("/api/incidents")
+                        .param("region", "mazowieckie"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void getAllIncidentsShouldReturnBadRequestForInvalidOpenedFromFormat() throws Exception {
         mockMvc.perform(get("/api/incidents")
                         .param("openedFrom", "2026-03-29"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Invalid value '2026-03-29' for parameter 'openedFrom'"));
-    }
-
-    @Test
-    void getAllIncidentsShouldReturnBadRequestForInvalidResolvedFromFormat() throws Exception {
-        mockMvc.perform(get("/api/incidents")
-                        .param("resolvedFrom", "2026-03-29"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Invalid value '2026-03-29' for parameter 'resolvedFrom'"));
     }
 
     @Test
@@ -196,8 +200,7 @@ class IncidentControllerWebMvcTest {
         String requestBody = """
                 {
                   "title": "   ",
-                  "region": "",
-                  "sourceAlarmType": "   "
+                  "incidentNumber": "   "
                 }
                 """;
 
@@ -207,8 +210,20 @@ class IncidentControllerWebMvcTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Validation failed"))
                 .andExpect(jsonPath("$.fieldErrors.title").value("title must not be blank"))
-                .andExpect(jsonPath("$.fieldErrors.region").value("region must not be blank"))
-                .andExpect(jsonPath("$.fieldErrors.sourceAlarmType").value("sourceAlarmType must not be blank"));
+                .andExpect(jsonPath("$.fieldErrors.incidentNumber").value("incidentNumber must not be blank"));
+    }
+
+    @Test
+    void updateIncidentShouldReturnBadRequestForInvalidEnumBody() throws Exception {
+        mockMvc.perform(patch("/api/incidents/{id}", 30L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "region": "INVALID"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Malformed JSON request or invalid enum value"));
     }
 
     @Test
@@ -236,7 +251,9 @@ class IncidentControllerWebMvcTest {
         response.setTitle("Closed incident");
         response.setStatus(IncidentStatus.CLOSED);
         response.setPriority(IncidentPriority.HIGH);
-        response.setRegion("SLASKIE");
+        response.setRegion(Region.SLASKIE);
+        response.setSourceAlarmType(SourceAlarmType.POWER);
+        response.setPossiblyPlanned(false);
         response.setOpenedAt(LocalDateTime.now().minusHours(3));
         response.setClosedAt(LocalDateTime.now());
 
@@ -276,19 +293,14 @@ class IncidentControllerWebMvcTest {
 
     static class FakeIncidentService extends IncidentService {
 
-        private Function<IncidentCreateRequest, IncidentResponse> createIncidentHandler =
-                request -> new IncidentResponse();
-        private LongFunction<IncidentResponse> getIncidentByIdHandler =
-                id -> new IncidentResponse();
-        private BiFunction<Long, IncidentUpdateRequest, IncidentResponse> updateIncidentHandler =
-                (id, request) -> new IncidentResponse();
-        private BiFunction<Long, IncidentActionRequest, IncidentResponse> acknowledgeIncidentHandler =
-                (id, request) -> new IncidentResponse();
-        private BiFunction<Long, IncidentActionRequest, IncidentResponse> closeIncidentHandler =
-                (id, request) -> new IncidentResponse();
+        private Function<IncidentCreateRequest, IncidentResponse> createIncidentHandler = request -> new IncidentResponse();
+        private LongFunction<IncidentResponse> getIncidentByIdHandler = id -> new IncidentResponse();
+        private BiFunction<Long, IncidentUpdateRequest, IncidentResponse> updateIncidentHandler = (id, request) -> new IncidentResponse();
+        private BiFunction<Long, IncidentActionRequest, IncidentResponse> acknowledgeIncidentHandler = (id, request) -> new IncidentResponse();
+        private BiFunction<Long, IncidentActionRequest, IncidentResponse> closeIncidentHandler = (id, request) -> new IncidentResponse();
 
         FakeIncidentService() {
-            super(null, null, null);
+            super(null, null, null, new SimpleMeterRegistry());
         }
 
         void setCreateIncidentHandler(Function<IncidentCreateRequest, IncidentResponse> createIncidentHandler) {
@@ -327,20 +339,20 @@ class IncidentControllerWebMvcTest {
         }
 
         @Override
-        public Page<IncidentResponse> getAllIncidents(
+        public Page<IncidentSummaryResponse> getAllIncidents(
                 int page,
                 int size,
                 String sortBy,
                 String direction,
                 IncidentPriority priority,
                 List<String> priorities,
-                String region,
+                Region region,
                 Boolean possiblyPlanned,
                 IncidentStatus status,
                 List<String> statuses,
                 String incidentNumber,
                 String title,
-                String sourceAlarmType,
+                SourceAlarmType sourceAlarmType,
                 LocalDateTime openedFrom,
                 LocalDateTime openedTo,
                 LocalDateTime acknowledgedFrom,

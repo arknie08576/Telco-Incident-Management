@@ -9,8 +9,8 @@ import java.util.List;
 @Schema(name = "IncidentPageResponse", description = "Stable paginated response for incident listing.")
 public class IncidentPageResponse {
 
-    @ArraySchema(schema = @Schema(implementation = IncidentResponse.class))
-    private final List<IncidentResponse> content;
+    @ArraySchema(schema = @Schema(implementation = IncidentSummaryResponse.class))
+    private final List<IncidentSummaryResponse> content;
 
     @Schema(description = "Zero-based page index.", example = "1")
     private final int number;
@@ -31,7 +31,7 @@ public class IncidentPageResponse {
     private final boolean last;
 
     private IncidentPageResponse(
-            List<IncidentResponse> content,
+            List<IncidentSummaryResponse> content,
             int number,
             int size,
             long totalElements,
@@ -48,7 +48,7 @@ public class IncidentPageResponse {
         this.last = last;
     }
 
-    public static IncidentPageResponse from(Page<IncidentResponse> page) {
+    public static IncidentPageResponse from(Page<IncidentSummaryResponse> page) {
         return new IncidentPageResponse(
                 page.getContent(),
                 page.getNumber(),
@@ -60,7 +60,7 @@ public class IncidentPageResponse {
         );
     }
 
-    public List<IncidentResponse> getContent() {
+    public List<IncidentSummaryResponse> getContent() {
         return content;
     }
 

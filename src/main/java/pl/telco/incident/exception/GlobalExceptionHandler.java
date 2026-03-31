@@ -3,9 +3,11 @@ package pl.telco.incident.exception;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import net.logstash.logback.argument.StructuredArguments;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -205,6 +207,52 @@ public class GlobalExceptionHandler {
                 StructuredArguments.keyValue("path", request.getRequestURI()),
                 StructuredArguments.keyValue("status", HttpStatus.CONFLICT.value()),
                 StructuredArguments.keyValue("message", ex.getMessage())
+        );
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex,
+            HttpServletRequest request
+    ) {
+        ApiErrorResponse errorResponse = new ApiErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                "Database constraint violation",
+                request.getRequestURI()
+        );
+
+        log.warn(
+                "data_integrity_violation {} {} {}",
+                StructuredArguments.keyValue("method", request.getMethod()),
+                StructuredArguments.keyValue("path", request.getRequestURI()),
+                StructuredArguments.keyValue("status", HttpStatus.CONFLICT.value())
+        );
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ApiErrorResponse> handleOptimisticLockingFailure(
+            ObjectOptimisticLockingFailureException ex,
+            HttpServletRequest request
+    ) {
+        ApiErrorResponse errorResponse = new ApiErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                "Resource was modified concurrently. Please retry.",
+                request.getRequestURI()
+        );
+
+        log.warn(
+                "optimistic_lock_conflict {} {} {}",
+                StructuredArguments.keyValue("method", request.getMethod()),
+                StructuredArguments.keyValue("path", request.getRequestURI()),
+                StructuredArguments.keyValue("status", HttpStatus.CONFLICT.value())
         );
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);

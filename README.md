@@ -13,6 +13,7 @@ Aktualnie zaimplementowany i przetestowany backend incidentow obejmuje:
 - tworzenie incydentu
 - pobranie detalu
 - liste z filtrowaniem, sortowaniem i paginacja
+- lookup `network_node` pod frontend i formularze incidentow
 - czesciowa edycje pol biznesowych
 - lifecycle incidentu
 - timeline zdarzen
@@ -30,6 +31,7 @@ Obslugiwane endpointy:
 - `PATCH /api/incidents/{id}/resolve`
 - `PATCH /api/incidents/{id}/close`
 - `GET /api/incidents/{id}/timeline`
+- `GET /api/network-nodes`
 
 ## Stack
 
@@ -59,6 +61,7 @@ Glowny kod aplikacji:
 Baza danych:
 - `src/main/resources/db/migration/V1__init.sql`
 - `src/main/resources/db/migration/V2__add_closed_at_to_incident.sql`
+- `src/main/resources/db/migration/V3__add_incident_version_and_query_indexes.sql`
 
 Testy:
 - `src/test/java` - unit, WebMvc, integracyjne i OpenAPI
@@ -145,7 +148,7 @@ Dostep po starcie:
 
 Backend w kontenerze:
 - laczy sie z `postgres` po sieci Compose
-- uruchamia profil `elk`
+- uruchamia profile `dev,elk`
 - wysyla logi do `logstash`
 - uruchamia Flyway przy starcie
 
@@ -183,6 +186,7 @@ Domyslna konfiguracja developerska jest w `src/main/resources/application.yaml`:
 - URL: `jdbc:postgresql://localhost:5432/telco_incident_db`
 - user: `postgres`
 - port aplikacji: `8080`
+- haslo bazy ustaw przez `SPRING_DATASOURCE_PASSWORD`
 
 Minimalny setup lokalnego PostgreSQL:
 
@@ -199,7 +203,8 @@ Jesli nie chcesz uzywac domyslnej konfiguracji, zmien `application.yaml` albo na
 Tryb developerski:
 
 ```powershell
-.\mvnw spring-boot:run
+$env:SPRING_DATASOURCE_PASSWORD="postgres"
+.\mvnw spring-boot:run "-Dspring-boot.run.profiles=dev"
 ```
 
 Build i uruchomienie jar:
@@ -217,11 +222,12 @@ Po uruchomieniu aplikacji:
 
 ## Seed danych
 
-Seeder jest wlaczony domyslnie i uruchamia sie tylko wtedy, gdy tabele sa puste.
+Seeder jest wylaczony domyslnie poza profilem `dev` i uruchamia sie tylko wtedy, gdy tabele sa puste.
 
 Konfiguracja:
 - property: `app.seed.enabled`
-- domyslnie: `true`
+- domyslnie: `false`
+- profil `dev`: `true`
 - w testach: `false`
 
 Seeder dodaje przykladowe:
@@ -236,7 +242,8 @@ Implementacja: `src/main/java/pl/telco/incident/config/DataInitializer.java`
 Przyklad wylaczenia seeda:
 
 ```powershell
-.\mvnw spring-boot:run "-Dspring-boot.run.jvmArguments=-Dapp.seed.enabled=false"
+$env:SPRING_DATASOURCE_PASSWORD="postgres"
+.\mvnw spring-boot:run "-Dspring-boot.run.profiles=dev" "-Dspring-boot.run.jvmArguments=-Dapp.seed.enabled=false"
 ```
 
 ## Observability i ELK
@@ -248,6 +255,7 @@ Aplikacja ma przygotowane podstawy pod centralizacje logow:
 - logowanie bledow w `GlobalExceptionHandler`
 - profil `elk`, ktory wysyla logi JSON bezposrednio do Logstash po TCP
 - Spring Boot Actuator dla darmowych endpointow observability
+- metryki biznesowe lifecycle i zmian incidentow przez Micrometer
 
 ### Actuator
 
@@ -262,6 +270,7 @@ To jest celowo lekki, darmowy pakiet observability dobry do projektu studenckieg
 - healthcheck pod lokalne uruchomienie i Docker
 - podstawowe metadane aplikacji
 - metryki runtime bez wchodzenia w platne funkcje platformowe
+- liczniki i timery biznesowe dla incident lifecycle
 
 ### Uruchomienie lokalnego stacka ELK
 
@@ -287,7 +296,8 @@ Dostepne endpointy:
 ### Start aplikacji z profilem ELK
 
 ```powershell
-.\mvnw spring-boot:run "-Dspring-boot.run.profiles=elk"
+$env:SPRING_DATASOURCE_PASSWORD="postgres"
+.\mvnw spring-boot:run "-Dspring-boot.run.profiles=dev,elk"
 ```
 
 Po starcie aplikacji logi trafia do Logstash, a potem do Elasticsearch do indeksu:
@@ -319,6 +329,14 @@ Przykladowe pola w logach:
 - `region`
 - `possiblyPlanned`
 - `service`
+
+Przykladowe metryki biznesowe:
+- `incident.created`
+- `incident.updated`
+- `incident.lifecycle.transition`
+- `incident.time.to_ack`
+- `incident.time.to_resolve`
+- `incident.time.to_close`
 
 ### Kibana starter pack
 
@@ -440,7 +458,12 @@ Reguly biznesowe:
 
 `GET /api/incidents/{id}`
 
-Zwraca aktualny stan incidentu wraz z timestampami lifecycle i lista node'ow.
+Zwraca detal incidentu:
+- aktualny status i timestampy lifecycle
+- `rootNodeId`
+- `sourceAlarmType`
+- `possiblyPlanned`
+- liste powiazanych node'ow z rolami i podstawowymi danymi inventory
 
 ### Update incident
 
@@ -495,6 +518,18 @@ Body moze zawierac opcjonalna notatke:
 
 Zwraca eventy w kolejnosci rosnacej po `createdAt`.
 
+### Network node lookup
+
+`GET /api/network-nodes`
+
+Endpoint pomocniczy pod frontend i formularze create/update.
+
+Wspiera filtry:
+- `q` - case-insensitive partial match po `nodeName`
+- `region`
+- `nodeType`
+- `active`
+
 ## Incident listing
 
 `GET /api/incidents`
@@ -512,6 +547,8 @@ Lista zwraca stabilny DTO zamiast surowego `PageImpl`:
   "last": true
 }
 ```
+
+`content` listy zawiera summary incidentu. Detail z node'ami i dodatkowymi polami jest zwracany przez `GET /api/incidents/{id}` oraz odpowiedzi mutujace.
 
 ### Paginacja
 
@@ -563,6 +600,8 @@ Filtry wielowartosciowe:
 - wartosci comma-separated
 
 Zakresy dat przyjmuja format ISO-8601, np. `2026-03-29T10:15:00`.
+
+`region` i `sourceAlarmType` sa typami domenowymi i przyjmuja wartosci enum, np. `MAZOWIECKIE`, `HARDWARE`.
 
 Przykladowe requesty:
 
@@ -653,6 +692,7 @@ Zakres testow:
 - WebMvc testy kontrolera i exception handling
 - integracyjne testy API na PostgreSQL przez Testcontainers
 - testy OpenAPI
+- testy observability oraz lookup `network_node`
 
 Testcontainers:
 - wymagaja dostepnego Dockera
@@ -665,10 +705,13 @@ Profil testowy:
 ## Kluczowe pliki
 
 - `src/main/java/pl/telco/incident/controller/IncidentController.java`
+- `src/main/java/pl/telco/incident/controller/NetworkNodeController.java`
 - `src/main/java/pl/telco/incident/service/IncidentService.java`
+- `src/main/java/pl/telco/incident/service/NetworkNodeService.java`
 - `src/main/java/pl/telco/incident/repository/specification/IncidentSpecifications.java`
 - `src/main/java/pl/telco/incident/dto/IncidentUpdateRequest.java`
 - `src/main/java/pl/telco/incident/config/OpenApiConfig.java`
+- `src/main/resources/db/migration/V3__add_incident_version_and_query_indexes.sql`
 - `src/test/java/pl/telco/incident/IncidentApiIntegrationTest.java`
 - `src/test/java/pl/telco/incident/controller/IncidentControllerWebMvcTest.java`
 - `src/test/java/pl/telco/incident/service/IncidentServiceTest.java`

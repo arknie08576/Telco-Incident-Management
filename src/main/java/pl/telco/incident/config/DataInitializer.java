@@ -13,6 +13,8 @@ import pl.telco.incident.entity.enums.IncidentNodeRole;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.entity.enums.NodeType;
+import pl.telco.incident.entity.enums.Region;
+import pl.telco.incident.entity.enums.SourceAlarmType;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
@@ -28,7 +30,7 @@ public class DataInitializer {
     private final JdbcTemplate jdbcTemplate;
 
     @Bean
-    @ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true")
     public CommandLineRunner initData() {
         return args -> {
             seedNetworkNodesIfEmpty();
@@ -47,7 +49,7 @@ public class DataInitializer {
         NetworkNode node1 = NetworkNode.builder()
                 .nodeName("CORE-RTR-WAW-01")
                 .nodeType(NodeType.ROUTER)
-                .region("MAZOWIECKIE")
+                .region(Region.MAZOWIECKIE)
                 .vendor("Cisco")
                 .active(true)
                 .build();
@@ -55,7 +57,7 @@ public class DataInitializer {
         NetworkNode node2 = NetworkNode.builder()
                 .nodeName("RAN-GNB-WAW-01")
                 .nodeType(NodeType.G_NODE_B)
-                .region("MAZOWIECKIE")
+                .region(Region.MAZOWIECKIE)
                 .vendor("Ericsson")
                 .active(true)
                 .build();
@@ -63,7 +65,7 @@ public class DataInitializer {
         NetworkNode node3 = NetworkNode.builder()
                 .nodeName("RAN-GNB-WAW-02")
                 .nodeType(NodeType.G_NODE_B)
-                .region("MAZOWIECKIE")
+                .region(Region.MAZOWIECKIE)
                 .vendor("Nokia")
                 .active(true)
                 .build();
@@ -71,7 +73,7 @@ public class DataInitializer {
         NetworkNode node4 = NetworkNode.builder()
                 .nodeName("RAN-ENB-WAW-01")
                 .nodeType(NodeType.E_NODE_B)
-                .region("MALOPOLSKIE")
+                .region(Region.MALOPOLSKIE)
                 .vendor("Huawei")
                 .active(true)
                 .build();
@@ -79,7 +81,7 @@ public class DataInitializer {
         NetworkNode node5 = NetworkNode.builder()
                 .nodeName("CORE-SBC-WAW-01")
                 .nodeType(NodeType.SBC)
-                .region("SLASKIE")
+                .region(Region.SLASKIE)
                 .vendor("Oracle")
                 .active(true)
                 .build();
@@ -106,8 +108,8 @@ public class DataInitializer {
         inc1.setTitle("Router failure in Warsaw");
         inc1.setStatus(IncidentStatus.OPEN);
         inc1.setPriority(IncidentPriority.HIGH);
-        inc1.setRegion("MAZOWIECKIE");
-        inc1.setSourceAlarmType("HARDWARE");
+        inc1.setRegion(Region.MAZOWIECKIE);
+        inc1.setSourceAlarmType(SourceAlarmType.HARDWARE);
         inc1.setPossiblyPlanned(false);
         inc1.setRootNode(router);
         inc1.setOpenedAt(now.minusHours(2));
@@ -122,8 +124,8 @@ public class DataInitializer {
         inc2.setTitle("5G cell degradation");
         inc2.setStatus(IncidentStatus.ACKNOWLEDGED);
         inc2.setPriority(IncidentPriority.MEDIUM);
-        inc2.setRegion("MAZOWIECKIE");
-        inc2.setSourceAlarmType("PERFORMANCE");
+        inc2.setRegion(Region.MAZOWIECKIE);
+        inc2.setSourceAlarmType(SourceAlarmType.PERFORMANCE);
         inc2.setPossiblyPlanned(false);
         inc2.setRootNode(gnb1);
         inc2.setOpenedAt(now.minusHours(6));
@@ -138,8 +140,8 @@ public class DataInitializer {
         inc3.setTitle("SBC overload");
         inc3.setStatus(IncidentStatus.RESOLVED);
         inc3.setPriority(IncidentPriority.CRITICAL);
-        inc3.setRegion("SLASKIE");
-        inc3.setSourceAlarmType("CAPACITY");
+        inc3.setRegion(Region.SLASKIE);
+        inc3.setSourceAlarmType(SourceAlarmType.CAPACITY);
         inc3.setPossiblyPlanned(false);
         inc3.setRootNode(sbc);
         inc3.setOpenedAt(now.minusDays(1));
@@ -156,8 +158,8 @@ public class DataInitializer {
         inc4.setTitle("Planned LTE maintenance");
         inc4.setStatus(IncidentStatus.OPEN);
         inc4.setPriority(IncidentPriority.LOW);
-        inc4.setRegion("MALOPOLSKIE");
-        inc4.setSourceAlarmType("MAINTENANCE");
+        inc4.setRegion(Region.MALOPOLSKIE);
+        inc4.setSourceAlarmType(SourceAlarmType.MAINTENANCE);
         inc4.setPossiblyPlanned(true);
         inc4.setRootNode(enb);
         inc4.setOpenedAt(now.minusDays(2));
@@ -170,15 +172,16 @@ public class DataInitializer {
         inc5.setTitle("Packet loss issue");
         inc5.setStatus(IncidentStatus.CLOSED);
         inc5.setPriority(IncidentPriority.HIGH);
-        inc5.setRegion("MAZOWIECKIE");
-        inc5.setSourceAlarmType("NETWORK");
+        inc5.setRegion(Region.MAZOWIECKIE);
+        inc5.setSourceAlarmType(SourceAlarmType.NETWORK);
         inc5.setPossiblyPlanned(false);
         inc5.setRootNode(gnb2);
         inc5.setOpenedAt(now.minusDays(5));
         inc5.setAcknowledgedAt(now.minusDays(5).plusHours(1));
         inc5.setResolvedAt(now.minusDays(4));
+        inc5.setClosedAt(now.minusDays(4).plusHours(4));
         inc5.setCreatedAt(now.minusDays(5));
-        inc5.setUpdatedAt(now.minusDays(4));
+        inc5.setUpdatedAt(now.minusDays(4).plusHours(4));
         inc5.addIncidentNode(createNode(gnb2, IncidentNodeRole.ROOT));
         inc5.addIncidentNode(createNode(gnb1, IncidentNodeRole.AFFECTED));
 
@@ -187,8 +190,8 @@ public class DataInitializer {
         inc6.setTitle("gNodeB reboot loop");
         inc6.setStatus(IncidentStatus.OPEN);
         inc6.setPriority(IncidentPriority.CRITICAL);
-        inc6.setRegion("POMORSKIE");
-        inc6.setSourceAlarmType("HARDWARE");
+        inc6.setRegion(Region.POMORSKIE);
+        inc6.setSourceAlarmType(SourceAlarmType.HARDWARE);
         inc6.setPossiblyPlanned(false);
         inc6.setRootNode(gnb1);
         inc6.setOpenedAt(now.minusHours(10));

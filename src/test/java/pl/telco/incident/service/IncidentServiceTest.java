@@ -1,10 +1,10 @@
 package pl.telco.incident.service;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -13,15 +13,20 @@ import pl.telco.incident.dto.IncidentActionRequest;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentNodeRequest;
 import pl.telco.incident.dto.IncidentResponse;
+import pl.telco.incident.dto.IncidentSummaryResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
 import pl.telco.incident.dto.IncidentUpdateRequest;
 import pl.telco.incident.entity.Incident;
+import pl.telco.incident.entity.IncidentNode;
 import pl.telco.incident.entity.IncidentTimeline;
 import pl.telco.incident.entity.NetworkNode;
 import pl.telco.incident.entity.enums.IncidentNodeRole;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
+import pl.telco.incident.entity.enums.IncidentTimelineEventType;
 import pl.telco.incident.entity.enums.NodeType;
+import pl.telco.incident.entity.enums.Region;
+import pl.telco.incident.entity.enums.SourceAlarmType;
 import pl.telco.incident.exception.BadRequestException;
 import pl.telco.incident.exception.ConflictException;
 import pl.telco.incident.repository.IncidentRepository;
@@ -52,16 +57,18 @@ class IncidentServiceTest {
     @Mock
     private IncidentTimelineRepository incidentTimelineRepository;
 
-    @InjectMocks
     private IncidentService incidentService;
-
+    private SimpleMeterRegistry meterRegistry;
     private NetworkNode rootNode;
     private NetworkNode affectedNode;
 
     @BeforeEach
     void setUp() {
-        rootNode = buildNode(1L, "CORE-RTR-WAW-01", NodeType.ROUTER, "MAZOWIECKIE");
-        affectedNode = buildNode(2L, "RAN-GNB-WAW-01", NodeType.G_NODE_B, "MAZOWIECKIE");
+        meterRegistry = new SimpleMeterRegistry();
+        incidentService = new IncidentService(incidentRepository, networkNodeRepository, incidentTimelineRepository, meterRegistry);
+
+        rootNode = buildNode(1L, "CORE-RTR-WAW-01", NodeType.ROUTER, Region.MAZOWIECKIE);
+        affectedNode = buildNode(2L, "RAN-GNB-WAW-01", NodeType.G_NODE_B, Region.MAZOWIECKIE);
 
         lenient().when(incidentRepository.save(any(Incident.class))).thenAnswer(invocation -> {
             Incident incident = invocation.getArgument(0);
@@ -80,6 +87,9 @@ class IncidentServiceTest {
             }
             if (incident.getCreatedAt() == null) {
                 incident.setCreatedAt(LocalDateTime.now());
+            }
+            if (incident.getVersion() == null) {
+                incident.setVersion(0L);
             }
             incident.setUpdatedAt(LocalDateTime.now());
 
@@ -101,8 +111,7 @@ class IncidentServiceTest {
         ));
 
         when(incidentRepository.findByIncidentNumber("INC-100")).thenReturn(Optional.empty());
-        when(networkNodeRepository.findById(rootNode.getId())).thenReturn(Optional.of(rootNode));
-        when(networkNodeRepository.findById(affectedNode.getId())).thenReturn(Optional.of(affectedNode));
+        when(networkNodeRepository.findAllById(any())).thenReturn(List.of(rootNode, affectedNode));
 
         IncidentResponse response = incidentService.createIncident(request);
 
@@ -117,13 +126,16 @@ class IncidentServiceTest {
 
         assertThat(response.getIncidentNumber()).isEqualTo("INC-100");
         assertThat(response.getStatus()).isEqualTo(IncidentStatus.OPEN);
+        assertThat(response.getRootNodeId()).isEqualTo(rootNode.getId());
+        assertThat(response.getNodes()).hasSize(2);
         assertThat(savedIncident.getRootNode()).isEqualTo(rootNode);
         assertThat(savedIncident.getIncidentNodes()).hasSize(2);
         assertThat(savedIncident.getIncidentNodes())
                 .extracting(node -> node.getNetworkNode().getId())
                 .containsExactly(rootNode.getId(), affectedNode.getId());
-        assertThat(timeline.getEventType()).isEqualTo("CREATED");
+        assertThat(timeline.getEventType()).isEqualTo(IncidentTimelineEventType.CREATED);
         assertThat(timeline.getMessage()).isEqualTo("Incident created");
+        assertThat(meterRegistry.find("incident.created").counter()).isNotNull();
     }
 
     @Test
@@ -180,8 +192,8 @@ class IncidentServiceTest {
         request.setIncidentNumber("INC-151");
         request.setTitle("Updated incident");
         request.setPriority(IncidentPriority.CRITICAL);
-        request.setRegion("SLASKIE");
-        request.setSourceAlarmType("POWER");
+        request.setRegion(Region.SLASKIE);
+        request.setSourceAlarmType(SourceAlarmType.POWER);
         request.setPossiblyPlanned(true);
 
         IncidentResponse response = incidentService.updateIncident(150L, request);
@@ -192,12 +204,13 @@ class IncidentServiceTest {
         assertThat(response.getIncidentNumber()).isEqualTo("INC-151");
         assertThat(response.getTitle()).isEqualTo("Updated incident");
         assertThat(response.getPriority()).isEqualTo(IncidentPriority.CRITICAL);
-        assertThat(response.getRegion()).isEqualTo("SLASKIE");
-        assertThat(incident.getSourceAlarmType()).isEqualTo("POWER");
+        assertThat(response.getRegion()).isEqualTo(Region.SLASKIE);
+        assertThat(incident.getSourceAlarmType()).isEqualTo(SourceAlarmType.POWER);
         assertThat(incident.getPossiblyPlanned()).isTrue();
-        assertThat(timelineCaptor.getValue().getEventType()).isEqualTo("UPDATED");
+        assertThat(timelineCaptor.getValue().getEventType()).isEqualTo(IncidentTimelineEventType.UPDATED);
         assertThat(timelineCaptor.getValue().getMessage())
                 .isEqualTo("Incident updated: incidentNumber, title, priority, region, sourceAlarmType, possiblyPlanned");
+        assertThat(meterRegistry.find("incident.updated").counter()).isNotNull();
     }
 
     @Test
@@ -209,8 +222,8 @@ class IncidentServiceTest {
         request.setIncidentNumber("INC-151");
         request.setTitle("Test incident");
         request.setPriority(IncidentPriority.HIGH);
-        request.setRegion("MAZOWIECKIE");
-        request.setSourceAlarmType("TEST");
+        request.setRegion(Region.MAZOWIECKIE);
+        request.setSourceAlarmType(SourceAlarmType.HARDWARE);
         request.setPossiblyPlanned(false);
 
         assertThatThrownBy(() -> incidentService.updateIncident(151L, request))
@@ -265,13 +278,16 @@ class IncidentServiceTest {
 
         assertThat(response.getStatus()).isEqualTo(IncidentStatus.ACKNOWLEDGED);
         assertThat(incident.getAcknowledgedAt()).isNotNull();
-        assertThat(timelineCaptor.getValue().getEventType()).isEqualTo("ACKNOWLEDGED");
+        assertThat(timelineCaptor.getValue().getEventType()).isEqualTo(IncidentTimelineEventType.ACKNOWLEDGED);
         assertThat(timelineCaptor.getValue().getMessage()).isEqualTo("Incident acknowledged");
+        assertThat(meterRegistry.find("incident.lifecycle.transition").counter()).isNotNull();
+        assertThat(meterRegistry.find("incident.time.to_ack").timer()).isNotNull();
     }
 
     @Test
     void resolveIncidentShouldAppendActionNoteToTimelineMessage() {
         Incident incident = buildIncident(201L, "INC-201", IncidentStatus.ACKNOWLEDGED);
+        incident.setAcknowledgedAt(LocalDateTime.now().minusHours(1));
         when(incidentRepository.findById(201L)).thenReturn(Optional.of(incident));
 
         IncidentResponse response = incidentService.resolveIncident(201L, new IncidentActionRequest("Traffic rerouted"));
@@ -281,8 +297,9 @@ class IncidentServiceTest {
 
         assertThat(response.getStatus()).isEqualTo(IncidentStatus.RESOLVED);
         assertThat(incident.getResolvedAt()).isNotNull();
-        assertThat(timelineCaptor.getValue().getEventType()).isEqualTo("RESOLVED");
+        assertThat(timelineCaptor.getValue().getEventType()).isEqualTo(IncidentTimelineEventType.RESOLVED);
         assertThat(timelineCaptor.getValue().getMessage()).isEqualTo("Incident resolved: Traffic rerouted");
+        assertThat(meterRegistry.find("incident.time.to_resolve").timer()).isNotNull();
     }
 
     @Test
@@ -385,28 +402,27 @@ class IncidentServiceTest {
     void getAllIncidentsShouldMapRepositoryPage() {
         Incident incident = buildIncident(203L, "INC-203", IncidentStatus.OPEN);
         incident.setPriority(IncidentPriority.CRITICAL);
-        incident.setRegion("POMORSKIE");
+        incident.setRegion(Region.POMORSKIE);
 
         when(incidentRepository.findAll(
                 org.mockito.ArgumentMatchers.<org.springframework.data.jpa.domain.Specification<Incident>>any(),
                 any(org.springframework.data.domain.Pageable.class)
-        ))
-                .thenReturn(new PageImpl<>(List.of(incident)));
+        )).thenReturn(new PageImpl<>(List.of(incident)));
 
-        Page<IncidentResponse> result = incidentService.getAllIncidents(
+        Page<IncidentSummaryResponse> result = incidentService.getAllIncidents(
                 0,
                 10,
                 "incidentNumber",
                 "asc",
                 IncidentPriority.CRITICAL,
                 List.of("HIGH", "CRITICAL"),
-                "pomorskie",
+                Region.POMORSKIE,
                 false,
                 IncidentStatus.OPEN,
                 List.of("OPEN", "RESOLVED"),
                 "INC-203",
                 "test",
-                "TEST",
+                null,
                 LocalDateTime.of(2026, 3, 29, 0, 0),
                 LocalDateTime.of(2026, 3, 29, 23, 59),
                 null,
@@ -453,8 +469,8 @@ class IncidentServiceTest {
     @Test
     void getIncidentTimelineShouldMapRepositoryEntries() {
         Incident incident = buildIncident(204L, "INC-204", IncidentStatus.RESOLVED);
-        IncidentTimeline created = buildTimeline(incident, "CREATED", "Incident created", LocalDateTime.now().minusHours(2));
-        IncidentTimeline resolved = buildTimeline(incident, "RESOLVED", "Incident resolved", LocalDateTime.now().minusHours(1));
+        IncidentTimeline created = buildTimeline(incident, IncidentTimelineEventType.CREATED, "Incident created", LocalDateTime.now().minusHours(2));
+        IncidentTimeline resolved = buildTimeline(incident, IncidentTimelineEventType.RESOLVED, "Incident resolved", LocalDateTime.now().minusHours(1));
 
         when(incidentRepository.findById(204L)).thenReturn(Optional.of(incident));
         when(incidentTimelineRepository.findByIncidentIdOrderByCreatedAtAsc(204L)).thenReturn(List.of(created, resolved));
@@ -462,8 +478,8 @@ class IncidentServiceTest {
         List<IncidentTimelineResponse> result = incidentService.getIncidentTimeline(204L);
 
         assertThat(result).hasSize(2);
-        assertThat(result.getFirst().getEventType()).isEqualTo("CREATED");
-        assertThat(result.get(1).getEventType()).isEqualTo("RESOLVED");
+        assertThat(result.getFirst().getEventType()).isEqualTo(IncidentTimelineEventType.CREATED);
+        assertThat(result.get(1).getEventType()).isEqualTo(IncidentTimelineEventType.RESOLVED);
     }
 
     private IncidentCreateRequest buildCreateRequest(String incidentNumber, Long rootNodeId, List<IncidentNodeRequest> nodes) {
@@ -471,8 +487,8 @@ class IncidentServiceTest {
         request.setIncidentNumber(incidentNumber);
         request.setTitle("Test incident");
         request.setPriority(IncidentPriority.HIGH);
-        request.setRegion("MAZOWIECKIE");
-        request.setSourceAlarmType("TEST");
+        request.setRegion(Region.MAZOWIECKIE);
+        request.setSourceAlarmType(SourceAlarmType.HARDWARE);
         request.setPossiblyPlanned(false);
         request.setRootNodeId(rootNodeId);
         request.setNodes(nodes);
@@ -486,7 +502,7 @@ class IncidentServiceTest {
         return request;
     }
 
-    private NetworkNode buildNode(Long id, String name, NodeType type, String region) {
+    private NetworkNode buildNode(Long id, String name, NodeType type, Region region) {
         return NetworkNode.builder()
                 .id(id)
                 .nodeName(name)
@@ -498,21 +514,33 @@ class IncidentServiceTest {
     }
 
     private Incident buildIncident(Long id, String incidentNumber, IncidentStatus status) {
-        return Incident.builder()
+        Incident incident = Incident.builder()
                 .id(id)
                 .incidentNumber(incidentNumber)
                 .title("Test incident")
                 .status(status)
                 .priority(IncidentPriority.HIGH)
-                .region("MAZOWIECKIE")
-                .sourceAlarmType("TEST")
+                .region(Region.MAZOWIECKIE)
+                .sourceAlarmType(SourceAlarmType.HARDWARE)
                 .possiblyPlanned(false)
                 .rootNode(rootNode)
                 .openedAt(LocalDateTime.now().minusHours(3))
                 .build();
+
+        IncidentNode rootIncidentNode = new IncidentNode();
+        rootIncidentNode.setNetworkNode(rootNode);
+        rootIncidentNode.setRole(IncidentNodeRole.ROOT);
+        incident.addIncidentNode(rootIncidentNode);
+
+        return incident;
     }
 
-    private IncidentTimeline buildTimeline(Incident incident, String eventType, String message, LocalDateTime createdAt) {
+    private IncidentTimeline buildTimeline(
+            Incident incident,
+            IncidentTimelineEventType eventType,
+            String message,
+            LocalDateTime createdAt
+    ) {
         IncidentTimeline timeline = new IncidentTimeline();
         timeline.setIncident(incident);
         timeline.setEventType(eventType);

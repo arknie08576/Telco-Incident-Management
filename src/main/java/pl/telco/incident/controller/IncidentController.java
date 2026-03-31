@@ -21,10 +21,13 @@ import pl.telco.incident.dto.IncidentActionRequest;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentPageResponse;
 import pl.telco.incident.dto.IncidentResponse;
+import pl.telco.incident.dto.IncidentSummaryResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
 import pl.telco.incident.dto.IncidentUpdateRequest;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
+import pl.telco.incident.entity.enums.Region;
+import pl.telco.incident.entity.enums.SourceAlarmType;
 import pl.telco.incident.service.IncidentService;
 
 import java.time.LocalDateTime;
@@ -70,7 +73,7 @@ public class IncidentController {
     @GetMapping("/{id}")
     @Operation(
             summary = "Get incident by ID",
-            description = "Returns a single incident with its current lifecycle timestamps."
+            description = "Returns a single incident with current lifecycle timestamps, root node and linked incident nodes."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Incident found"),
@@ -145,8 +148,8 @@ public class IncidentController {
             @RequestParam(name = "priority", required = false) IncidentPriority priority,
             @Parameter(description = "Filter by multiple priorities. Supports repeated params or comma-separated values.", example = "HIGH,CRITICAL")
             @RequestParam(name = "priorities", required = false) List<String> priorities,
-            @Parameter(description = "Case-insensitive region filter", example = "MAZOWIECKIE")
-            @RequestParam(name = "region", required = false) String region,
+            @Parameter(description = "Region filter", example = "MAZOWIECKIE")
+            @RequestParam(name = "region", required = false) Region region,
             @Parameter(description = "Filter incidents that may be planned work", example = "false")
             @RequestParam(name = "possiblyPlanned", required = false) Boolean possiblyPlanned,
             @Parameter(description = "Filter by a single lifecycle status", example = "OPEN")
@@ -157,8 +160,8 @@ public class IncidentController {
             @RequestParam(name = "incidentNumber", required = false) String incidentNumber,
             @Parameter(description = "Case-insensitive partial match on title", example = "router failure")
             @RequestParam(name = "title", required = false) String title,
-            @Parameter(description = "Case-insensitive exact match on source alarm type", example = "HARDWARE")
-            @RequestParam(name = "sourceAlarmType", required = false) String sourceAlarmType,
+            @Parameter(description = "Source alarm type filter", example = "HARDWARE")
+            @RequestParam(name = "sourceAlarmType", required = false) SourceAlarmType sourceAlarmType,
             @Parameter(description = "Include incidents opened at or after this timestamp.", example = "2026-03-29T07:00:00")
             @RequestParam(name = "openedFrom", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime openedFrom,
@@ -184,7 +187,7 @@ public class IncidentController {
             @RequestParam(name = "closedTo", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime closedTo
     ) {
-        Page<IncidentResponse> incidentPage = incidentService.getAllIncidents(
+        Page<IncidentSummaryResponse> incidentPage = incidentService.getAllIncidents(
                 page,
                 size,
                 sortBy,

@@ -1,5 +1,6 @@
 package pl.telco.incident.repository;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import pl.telco.incident.entity.Incident;
@@ -9,4 +10,7 @@ import java.util.Optional;
 public interface IncidentRepository extends JpaRepository<Incident, Long>, JpaSpecificationExecutor<Incident> {
 
     Optional<Incident> findByIncidentNumber(String incidentNumber);
+
+    @EntityGraph(attributePaths = {"rootNode", "incidentNodes", "incidentNodes.networkNode"})
+    Optional<Incident> findDetailedById(Long id);
 }

@@ -4,13 +4,13 @@ spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/telco_incident_db}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
-    password: ${SPRING_DATASOURCE_PASSWORD:aArkus14}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
 
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
@@ -27,6 +27,8 @@ springdoc:
     path: /swagger-ui.html
 
 app:
+  seed:
+    enabled: false
   observability:
     logstash:
       host: ${APP_OBSERVABILITY_LOGSTASH_HOST:localhost}
