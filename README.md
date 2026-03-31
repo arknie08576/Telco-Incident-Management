@@ -23,7 +23,7 @@ The currently implemented and tested incident backend includes:
 - OpenAPI / Swagger UI
 - stable pagination response DTO
 - global exception handling
-- `spring.jpa.open-in-view=false`
+- closed persistence boundary with `spring.jpa.open-in-view=false`, so controllers operate on DTOs instead of lazy-loading JPA state during response rendering
 
 Supported endpoints:
 - `POST /api/incidents`
