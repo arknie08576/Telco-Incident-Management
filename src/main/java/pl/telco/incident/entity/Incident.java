@@ -5,6 +5,7 @@ import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.entity.enums.Region;
 import pl.telco.incident.entity.enums.SourceAlarmType;
+import pl.telco.incident.observability.TelcoAuditEntityListener;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -12,6 +13,7 @@ import java.util.List;
 
 @Entity
 @Table(name = "incident")
+@EntityListeners(TelcoAuditEntityListener.class)
 public class Incident {
 
     @Id

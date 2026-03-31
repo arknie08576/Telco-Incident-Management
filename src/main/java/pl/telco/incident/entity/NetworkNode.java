@@ -3,6 +3,7 @@ package pl.telco.incident.entity;
 import jakarta.persistence.*;
 import pl.telco.incident.entity.enums.NodeType;
 import pl.telco.incident.entity.enums.Region;
+import pl.telco.incident.observability.TelcoAuditEntityListener;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -10,6 +11,7 @@ import java.util.List;
 
 @Entity
 @Table(name = "network_node")
+@EntityListeners(TelcoAuditEntityListener.class)
 public class NetworkNode {
 
     @Id

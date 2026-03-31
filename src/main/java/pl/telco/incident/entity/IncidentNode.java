@@ -2,6 +2,7 @@ package pl.telco.incident.entity;
 
 import jakarta.persistence.*;
 import pl.telco.incident.entity.enums.IncidentNodeRole;
+import pl.telco.incident.observability.TelcoAuditEntityListener;
 
 import java.time.LocalDateTime;
 
@@ -12,6 +13,7 @@ import java.time.LocalDateTime;
                 @UniqueConstraint(name = "uq_incident_node", columnNames = {"incident_id", "network_node_id"})
         }
 )
+@EntityListeners(TelcoAuditEntityListener.class)
 public class IncidentNode {
 
     @Id

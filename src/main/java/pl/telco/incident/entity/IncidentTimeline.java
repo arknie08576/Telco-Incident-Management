@@ -2,11 +2,13 @@ package pl.telco.incident.entity;
 
 import jakarta.persistence.*;
 import pl.telco.incident.entity.enums.IncidentTimelineEventType;
+import pl.telco.incident.observability.TelcoAuditEntityListener;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "incident_timeline")
+@EntityListeners(TelcoAuditEntityListener.class)
 public class IncidentTimeline {
 
     @Id

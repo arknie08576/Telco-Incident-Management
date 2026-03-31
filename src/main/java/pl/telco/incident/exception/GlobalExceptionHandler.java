@@ -48,7 +48,10 @@ public class GlobalExceptionHandler {
         );
 
         log.warn(
-                "validation_failed {} {} {} {}",
+                "validation_failed {} {} {} {} {} {} {}",
+                StructuredArguments.keyValue("eventDataset", "system"),
+                StructuredArguments.keyValue("eventCategory", "application_error"),
+                StructuredArguments.keyValue("eventAction", "validation_failed"),
                 StructuredArguments.keyValue("method", request.getMethod()),
                 StructuredArguments.keyValue("path", request.getRequestURI()),
                 StructuredArguments.keyValue("status", HttpStatus.BAD_REQUEST.value()),
@@ -80,7 +83,10 @@ public class GlobalExceptionHandler {
         );
 
         log.warn(
-                "constraint_violation {} {} {} {}",
+                "constraint_violation {} {} {} {} {} {} {}",
+                StructuredArguments.keyValue("eventDataset", "system"),
+                StructuredArguments.keyValue("eventCategory", "application_error"),
+                StructuredArguments.keyValue("eventAction", "constraint_violation"),
                 StructuredArguments.keyValue("method", request.getMethod()),
                 StructuredArguments.keyValue("path", request.getRequestURI()),
                 StructuredArguments.keyValue("status", HttpStatus.BAD_REQUEST.value()),
@@ -104,7 +110,10 @@ public class GlobalExceptionHandler {
         );
 
         log.warn(
-                "http_message_not_readable {} {} {}",
+                "http_message_not_readable {} {} {} {} {} {}",
+                StructuredArguments.keyValue("eventDataset", "system"),
+                StructuredArguments.keyValue("eventCategory", "application_error"),
+                StructuredArguments.keyValue("eventAction", "http_message_not_readable"),
                 StructuredArguments.keyValue("method", request.getMethod()),
                 StructuredArguments.keyValue("path", request.getRequestURI()),
                 StructuredArguments.keyValue("status", HttpStatus.BAD_REQUEST.value())
@@ -129,7 +138,10 @@ public class GlobalExceptionHandler {
         );
 
         log.warn(
-                "method_argument_type_mismatch {} {} {} {} {}",
+                "method_argument_type_mismatch {} {} {} {} {} {} {} {}",
+                StructuredArguments.keyValue("eventDataset", "system"),
+                StructuredArguments.keyValue("eventCategory", "application_error"),
+                StructuredArguments.keyValue("eventAction", "method_argument_type_mismatch"),
                 StructuredArguments.keyValue("method", request.getMethod()),
                 StructuredArguments.keyValue("path", request.getRequestURI()),
                 StructuredArguments.keyValue("status", HttpStatus.BAD_REQUEST.value()),
@@ -154,7 +166,10 @@ public class GlobalExceptionHandler {
         );
 
         log.warn(
-                "bad_request {} {} {} {}",
+                "bad_request {} {} {} {} {} {} {}",
+                StructuredArguments.keyValue("eventDataset", "system"),
+                StructuredArguments.keyValue("eventCategory", "application_error"),
+                StructuredArguments.keyValue("eventAction", "bad_request"),
                 StructuredArguments.keyValue("method", request.getMethod()),
                 StructuredArguments.keyValue("path", request.getRequestURI()),
                 StructuredArguments.keyValue("status", HttpStatus.BAD_REQUEST.value()),
@@ -178,7 +193,10 @@ public class GlobalExceptionHandler {
         );
 
         log.warn(
-                "resource_not_found {} {} {} {}",
+                "resource_not_found {} {} {} {} {} {} {}",
+                StructuredArguments.keyValue("eventDataset", "system"),
+                StructuredArguments.keyValue("eventCategory", "application_error"),
+                StructuredArguments.keyValue("eventAction", "resource_not_found"),
                 StructuredArguments.keyValue("method", request.getMethod()),
                 StructuredArguments.keyValue("path", request.getRequestURI()),
                 StructuredArguments.keyValue("status", HttpStatus.NOT_FOUND.value()),
@@ -202,7 +220,10 @@ public class GlobalExceptionHandler {
         );
 
         log.warn(
-                "conflict {} {} {} {}",
+                "conflict {} {} {} {} {} {} {}",
+                StructuredArguments.keyValue("eventDataset", "system"),
+                StructuredArguments.keyValue("eventCategory", "application_error"),
+                StructuredArguments.keyValue("eventAction", "conflict"),
                 StructuredArguments.keyValue("method", request.getMethod()),
                 StructuredArguments.keyValue("path", request.getRequestURI()),
                 StructuredArguments.keyValue("status", HttpStatus.CONFLICT.value()),
@@ -226,7 +247,10 @@ public class GlobalExceptionHandler {
         );
 
         log.warn(
-                "data_integrity_violation {} {} {}",
+                "data_integrity_violation {} {} {} {} {} {}",
+                StructuredArguments.keyValue("eventDataset", "system"),
+                StructuredArguments.keyValue("eventCategory", "application_error"),
+                StructuredArguments.keyValue("eventAction", "data_integrity_violation"),
                 StructuredArguments.keyValue("method", request.getMethod()),
                 StructuredArguments.keyValue("path", request.getRequestURI()),
                 StructuredArguments.keyValue("status", HttpStatus.CONFLICT.value())
@@ -249,7 +273,10 @@ public class GlobalExceptionHandler {
         );
 
         log.warn(
-                "optimistic_lock_conflict {} {} {}",
+                "optimistic_lock_conflict {} {} {} {} {} {}",
+                StructuredArguments.keyValue("eventDataset", "system"),
+                StructuredArguments.keyValue("eventCategory", "application_error"),
+                StructuredArguments.keyValue("eventAction", "optimistic_lock_conflict"),
                 StructuredArguments.keyValue("method", request.getMethod()),
                 StructuredArguments.keyValue("path", request.getRequestURI()),
                 StructuredArguments.keyValue("status", HttpStatus.CONFLICT.value())
@@ -272,7 +299,10 @@ public class GlobalExceptionHandler {
         );
 
         log.error(
-                "unexpected_server_error {} {} {}",
+                "unexpected_server_error {} {} {} {} {} {}",
+                StructuredArguments.keyValue("eventDataset", "system"),
+                StructuredArguments.keyValue("eventCategory", "application_error"),
+                StructuredArguments.keyValue("eventAction", "unexpected_server_error"),
                 StructuredArguments.keyValue("method", request.getMethod()),
                 StructuredArguments.keyValue("path", request.getRequestURI()),
                 StructuredArguments.keyValue("status", HttpStatus.INTERNAL_SERVER_ERROR.value()),

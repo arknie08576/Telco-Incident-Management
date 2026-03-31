@@ -43,7 +43,10 @@ public class RequestCorrelationFilter extends OncePerRequestFilter {
             long durationMs = (System.nanoTime() - startedAt) / 1_000_000;
 
             log.info(
-                    "http_request_completed {} {} {} {} {} {}",
+                    "http_request_completed {} {} {} {} {} {} {} {} {}",
+                    StructuredArguments.keyValue("eventDataset", "http"),
+                    StructuredArguments.keyValue("eventCategory", "transport"),
+                    StructuredArguments.keyValue("eventAction", "request_completed"),
                     StructuredArguments.keyValue("method", request.getMethod()),
                     StructuredArguments.keyValue("path", request.getRequestURI()),
                     StructuredArguments.keyValue("query", request.getQueryString()),

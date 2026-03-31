@@ -15,11 +15,14 @@ import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.entity.enums.NodeType;
 import pl.telco.incident.entity.enums.Region;
 import pl.telco.incident.entity.enums.SourceAlarmType;
+import pl.telco.incident.observability.ObservabilityEventLogger;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Configuration
 @RequiredArgsConstructor
@@ -28,21 +31,26 @@ public class DataInitializer {
     private final NetworkNodeRepository networkNodeRepository;
     private final IncidentRepository incidentRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final ObservabilityEventLogger observabilityEventLogger;
 
     @Bean
     @ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true")
     public CommandLineRunner initData() {
         return args -> {
+            logSystemSeedEvent("start", "seed_start", Map.of("seedEnabled", true));
             seedNetworkNodesIfEmpty();
             seedIncidentsIfEmpty();
             seedMaintenanceWindowsIfEmpty();
             seedAlarmEventsIfEmpty();
             seedIncidentTimelineIfEmpty();
+            logSystemSeedEvent("complete", "seed_complete", Map.of("seedEnabled", true));
         };
     }
 
     private void seedNetworkNodesIfEmpty() {
-        if (networkNodeRepository.count() > 0) {
+        long count = networkNodeRepository.count();
+        if (count > 0) {
+            logSeedSkip("network_node", count);
             return;
         }
 
@@ -88,10 +96,13 @@ public class DataInitializer {
 
         networkNodeRepository.saveAll(List.of(node1, node2, node3, node4, node5));
         networkNodeRepository.flush();
+        logSystemSeedEvent("seed", "network_node_seeded", Map.of("tableName", "network_node", "rowCount", 5));
     }
 
     private void seedIncidentsIfEmpty() {
-        if (incidentRepository.count() > 0) {
+        long count = incidentRepository.count();
+        if (count > 0) {
+            logSeedSkip("incident", count);
             return;
         }
 
@@ -203,6 +214,7 @@ public class DataInitializer {
 
         incidentRepository.saveAll(List.of(inc1, inc2, inc3, inc4, inc5, inc6));
         incidentRepository.flush();
+        logSystemSeedEvent("seed", "incident_seeded", Map.of("tableName", "incident", "rowCount", 6));
     }
 
     private void seedMaintenanceWindowsIfEmpty() {
@@ -212,6 +224,7 @@ public class DataInitializer {
         );
 
         if (count != null && count > 0) {
+            logSeedSkip("maintenance_window", count);
             return;
         }
 
@@ -228,6 +241,15 @@ public class DataInitializer {
                 now.plusDays(1).plusHours(4),
                 now
         );
+        logDatasetSeedEvent(
+                "maintenance",
+                "maintenance_window",
+                "insert",
+                Map.of(
+                        "title", "Planned RAN upgrade - Krakow",
+                        "maintenanceStatus", "PLANNED"
+                )
+        );
 
         jdbcTemplate.update("""
                 INSERT INTO maintenance_window (title, description, status, start_time, end_time, created_at)
@@ -239,6 +261,15 @@ public class DataInitializer {
                 now.minusDays(3),
                 now.minusDays(3).plusHours(2),
                 now.minusDays(4)
+        );
+        logDatasetSeedEvent(
+                "maintenance",
+                "maintenance_window",
+                "insert",
+                Map.of(
+                        "title", "Core SBC patching",
+                        "maintenanceStatus", "COMPLETED"
+                )
         );
 
         Long mw1Id = jdbcTemplate.queryForObject(
@@ -263,6 +294,12 @@ public class DataInitializer {
                 """,
                 mw1Id, enbId, now
         );
+        logDatasetSeedEvent(
+                "maintenance",
+                "maintenance_node",
+                "insert",
+                Map.of("maintenanceWindowId", mw1Id, "networkNodeId", enbId)
+        );
 
         jdbcTemplate.update("""
                 INSERT INTO maintenance_node (maintenance_window_id, network_node_id, created_at)
@@ -270,12 +307,24 @@ public class DataInitializer {
                 """,
                 mw1Id, gnb1Id, now
         );
+        logDatasetSeedEvent(
+                "maintenance",
+                "maintenance_node",
+                "insert",
+                Map.of("maintenanceWindowId", mw1Id, "networkNodeId", gnb1Id)
+        );
 
         jdbcTemplate.update("""
                 INSERT INTO maintenance_node (maintenance_window_id, network_node_id, created_at)
                 VALUES (?, ?, ?)
                 """,
                 mw2Id, sbcId, now.minusDays(4)
+        );
+        logDatasetSeedEvent(
+                "maintenance",
+                "maintenance_node",
+                "insert",
+                Map.of("maintenanceWindowId", mw2Id, "networkNodeId", sbcId)
         );
     }
 
@@ -286,6 +335,7 @@ public class DataInitializer {
         );
 
         if (count != null && count > 0) {
+            logSeedSkip("alarm_event", count);
             return;
         }
 
@@ -323,6 +373,12 @@ public class DataInitializer {
                 now.minusHours(2).plusMinutes(1),
                 now.minusHours(2)
         );
+        logDatasetSeedEvent(
+                "alarm",
+                "alarm_event",
+                "insert",
+                Map.of("externalId", "ALARM-001", "alarmType", "LINK_DOWN", "incidentId", inc1Id, "networkNodeId", routerId)
+        );
 
         jdbcTemplate.update("""
                 INSERT INTO alarm_event (
@@ -343,6 +399,12 @@ public class DataInitializer {
                 now.minusHours(6),
                 now.minusHours(6).plusMinutes(2),
                 now.minusHours(6)
+        );
+        logDatasetSeedEvent(
+                "alarm",
+                "alarm_event",
+                "insert",
+                Map.of("externalId", "ALARM-002", "alarmType", "CELL_DEGRADED", "incidentId", inc2Id, "networkNodeId", gnb1Id)
         );
 
         jdbcTemplate.update("""
@@ -365,6 +427,12 @@ public class DataInitializer {
                 now.minusDays(1).plusMinutes(1),
                 now.minusDays(1)
         );
+        logDatasetSeedEvent(
+                "alarm",
+                "alarm_event",
+                "insert",
+                Map.of("externalId", "ALARM-003", "alarmType", "CPU_HIGH", "incidentId", inc3Id, "networkNodeId", sbcId)
+        );
 
         jdbcTemplate.update("""
                 INSERT INTO alarm_event (
@@ -385,6 +453,12 @@ public class DataInitializer {
                 now.minusDays(2),
                 now.minusDays(2).plusMinutes(1),
                 now.minusDays(2)
+        );
+        logDatasetSeedEvent(
+                "alarm",
+                "alarm_event",
+                "insert",
+                Map.of("externalId", "ALARM-004", "alarmType", "MAINTENANCE_MODE", "incidentId", inc4Id, "networkNodeId", enbId)
         );
 
         jdbcTemplate.update("""
@@ -407,6 +481,17 @@ public class DataInitializer {
                 now.minusHours(3).plusMinutes(1),
                 now.minusHours(3)
         );
+        logDatasetSeedEvent(
+                "alarm",
+                "alarm_event",
+                "insert",
+                nullableMap(
+                        "externalId", "ALARM-005",
+                        "alarmType", "PACKET_LOSS",
+                        "incidentId", null,
+                        "networkNodeId", gnb2Id
+                )
+        );
 
         jdbcTemplate.update("""
                 INSERT INTO alarm_event (
@@ -428,6 +513,12 @@ public class DataInitializer {
                 now.minusHours(10).plusMinutes(1),
                 now.minusHours(10)
         );
+        logDatasetSeedEvent(
+                "alarm",
+                "alarm_event",
+                "insert",
+                Map.of("externalId", "ALARM-006", "alarmType", "REBOOT_LOOP", "incidentId", inc6Id, "networkNodeId", gnb1Id)
+        );
     }
 
     private void seedIncidentTimelineIfEmpty() {
@@ -437,6 +528,7 @@ public class DataInitializer {
         );
 
         if (count != null && count > 0) {
+            logSeedSkip("incident_timeline", count);
             return;
         }
 
@@ -454,12 +546,24 @@ public class DataInitializer {
                 """,
                 inc1Id, "CREATED", "Incident created from router failure alarm", now.minusHours(2)
         );
+        logDatasetSeedEvent(
+                "incident",
+                "incident_timeline",
+                "insert",
+                Map.of("incidentId", inc1Id, "timelineEventType", "CREATED")
+        );
 
         jdbcTemplate.update("""
                 INSERT INTO incident_timeline (incident_id, event_type, message, created_at)
                 VALUES (?, ?, ?, ?)
                 """,
                 inc2Id, "ACKNOWLEDGED", "NOC engineer acknowledged cell degradation", now.minusHours(5)
+        );
+        logDatasetSeedEvent(
+                "incident",
+                "incident_timeline",
+                "insert",
+                Map.of("incidentId", inc2Id, "timelineEventType", "ACKNOWLEDGED")
         );
 
         jdbcTemplate.update("""
@@ -468,12 +572,24 @@ public class DataInitializer {
                 """,
                 inc3Id, "RESOLVED", "Traffic rebalanced and SBC CPU normalized", now.minusHours(4)
         );
+        logDatasetSeedEvent(
+                "incident",
+                "incident_timeline",
+                "insert",
+                Map.of("incidentId", inc3Id, "timelineEventType", "RESOLVED")
+        );
 
         jdbcTemplate.update("""
                 INSERT INTO incident_timeline (incident_id, event_type, message, created_at)
                 VALUES (?, ?, ?, ?)
                 """,
                 inc5Id, "CLOSED", "Packet loss issue closed after verification", now.minusDays(4)
+        );
+        logDatasetSeedEvent(
+                "incident",
+                "incident_timeline",
+                "insert",
+                Map.of("incidentId", inc5Id, "timelineEventType", "CLOSED")
         );
 
         jdbcTemplate.update("""
@@ -482,6 +598,57 @@ public class DataInitializer {
                 """,
                 inc6Id, "CREATED", "Incident opened due to repeated reboot loop", now.minusHours(10)
         );
+        logDatasetSeedEvent(
+                "incident",
+                "incident_timeline",
+                "insert",
+                Map.of("incidentId", inc6Id, "timelineEventType", "CREATED")
+        );
+    }
+
+    private void logSeedSkip(String tableName, long existingRowCount) {
+        logSystemSeedEvent(
+                "skip",
+                "seed_skipped",
+                Map.of(
+                        "tableName", tableName,
+                        "existingRowCount", existingRowCount
+                )
+        );
+    }
+
+    private void logSystemSeedEvent(String action, String message, Map<String, Object> fields) {
+        observabilityEventLogger.logEvent(
+                "system",
+                "seed",
+                action,
+                message,
+                fields
+        );
+    }
+
+    private void logDatasetSeedEvent(String dataset, String tableName, String action, Map<String, Object> fields) {
+        Map<String, Object> logFields = new LinkedHashMap<>();
+        logFields.put("tableName", tableName);
+        logFields.putAll(fields);
+
+        observabilityEventLogger.logEvent(
+                dataset,
+                "seed",
+                action,
+                "seed_row_written",
+                logFields
+        );
+    }
+
+    private Map<String, Object> nullableMap(Object... keyValues) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+
+        for (int i = 0; i < keyValues.length; i += 2) {
+            fields.put((String) keyValues[i], keyValues[i + 1]);
+        }
+
+        return fields;
     }
 
     private NetworkNode getNodeByName(String nodeName) {

@@ -56,6 +56,7 @@ Glowny kod aplikacji:
 - `src/main/java/pl/telco/incident/entity` - encje domenowe
 - `src/main/java/pl/telco/incident/dto` - requesty i response'y API
 - `src/main/java/pl/telco/incident/exception` - bledy API i handler
+- `src/main/java/pl/telco/incident/observability` - wspolny logger eventow, audit listener i logi lifecycle aplikacji
 - `src/main/java/pl/telco/incident/config` - Swagger i seed danych
 
 Baza danych:
@@ -253,6 +254,8 @@ Aplikacja ma przygotowane podstawy pod centralizacje logow:
 - logowanie request/response na warstwie HTTP
 - logi biznesowe dla create, update i lifecycle incidentow
 - logowanie bledow w `GlobalExceptionHandler`
+- audit zmian encji JPA dla `incident`, `incident_node`, `incident_timeline` i `network_node`
+- logi seed/system dla `maintenance_window`, `maintenance_node` i `alarm_event`
 - profil `elk`, ktory wysyla logi JSON bezposrednio do Logstash po TCP
 - Spring Boot Actuator dla darmowych endpointow observability
 - metryki biznesowe lifecycle i zmian incidentow przez Micrometer
@@ -314,6 +317,12 @@ telco-incident-management-*
 
 Przykladowe pola w logach:
 - `requestId`
+- `eventDataset`
+- `eventCategory`
+- `eventAction`
+- `entityType`
+- `entityId`
+- `tableName`
 - `method`
 - `path`
 - `status`
@@ -329,6 +338,14 @@ Przykladowe pola w logach:
 - `region`
 - `possiblyPlanned`
 - `service`
+
+Glownie wykorzystywane datasety:
+- `http`
+- `system`
+- `incident`
+- `network_node`
+- `maintenance`
+- `alarm`
 
 Przykladowe metryki biznesowe:
 - `incident.created`
@@ -379,6 +396,19 @@ Po odpaleniu skryptu ustaw w Kibanie zakres czasu na `Last 24 hours` i kliknij `
 
 Najprostszy flow do pokazania projektu na demo:
 
+Skrypt odpalający całe demo
+```powershell
+.\elk\demo\start-demo.ps1
+```
+
+W kibanie kliknij Analitycs, Dashboard, Telco Platform Observability
+
+po demonstracji zamknij demo używając:
+
+```powershell
+docker compose down -v
+```
+Alternatywnie uruchom wszystko samemu:
 1. Uruchom pelny stack:
 
 ```powershell
@@ -401,22 +431,28 @@ docker compose up -d --build
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - Kibana: `http://localhost:5601`
 
-5. W Kibanie otworz dashboard `Telco Incident Observability`, ustaw `Last 24 hours` i kliknij `Refresh`.
+5. W Kibanie otworz dashboard `Telco Platform Observability`, ustaw `Last 24 hours` i kliknij `Refresh`.
 
 Po imporcie w Kibanie pojawi sie dashboard:
 
 ```text
-Telco Incident Observability
+Telco Platform Observability
+```
+po demonstracji zamknij demo używając:
+
+```powershell
+docker compose down -v
 ```
 
 To nie jest rozbudowany dashboard produkcyjny. To lekki starter pod projekt studencki:
-- metric z laczna liczba eventow incidentow
-- metric z bledami HTTP dla incident API
-- rozklad po `incidentStatus`
-- rozklad po `priority`
+- metric z laczna liczba eventow calej platformy
+- metric z bledami HTTP
+- rozklad po `eventDataset`
+- rozklad zmian persistence po `entityType`
 - eventy w czasie
-- rozklad po `eventAction`
-- tabele ostatnich eventow do szybkiego drilldownu
+- akcje `system` i `seed`
+- aktywnosc dla `alarm` i `maintenance`
+- tabela ostatnich eventow do szybkiego drilldownu
 
 ## Incident API
 
@@ -708,6 +744,8 @@ Profil testowy:
 - `src/main/java/pl/telco/incident/controller/NetworkNodeController.java`
 - `src/main/java/pl/telco/incident/service/IncidentService.java`
 - `src/main/java/pl/telco/incident/service/NetworkNodeService.java`
+- `src/main/java/pl/telco/incident/observability/ObservabilityEventLogger.java`
+- `src/main/java/pl/telco/incident/observability/TelcoAuditEntityListener.java`
 - `src/main/java/pl/telco/incident/repository/specification/IncidentSpecifications.java`
 - `src/main/java/pl/telco/incident/dto/IncidentUpdateRequest.java`
 - `src/main/java/pl/telco/incident/config/OpenApiConfig.java`
