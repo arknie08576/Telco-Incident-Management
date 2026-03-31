@@ -91,6 +91,22 @@ for ($index = 1; $index -le $IncidentCount; $index++) {
     $possiblyPlanned = ($index % 2 -eq 0)
     $incidentNumber = "INC-ELK-$suffix-$index"
     $title = "ELK demo incident $index"
+    $networkNode = Invoke-IncidentApi -Method POST -Uri "$BaseUrl/api/network-nodes" -Body @{
+        nodeName = "ELK-DEMO-$suffix"
+        nodeType = if ($sourceAlarmType -eq "CAPACITY") { "SBC" } elseif ($sourceAlarmType -eq "MAINTENANCE") { "E_NODE_B" } else { "G_NODE_B" }
+        region = $region
+        vendor = "DemoVendor"
+        active = $true
+    }
+    Write-Host "Created network node $($networkNode.id): $($networkNode.nodeName)"
+    Start-Sleep -Milliseconds $DelayMs
+
+    $updatedNode = Invoke-IncidentApi -Method PATCH -Uri "$BaseUrl/api/network-nodes/$($networkNode.id)" -Body @{
+        vendor = "DemoVendor-$index"
+        active = $true
+    }
+    Write-Host "Updated network node $($updatedNode.id) -> vendor $($updatedNode.vendor)"
+    Start-Sleep -Milliseconds $DelayMs
 
     $createBody = New-IncidentCreateBody `
         -IncidentNumber $incidentNumber `
@@ -139,9 +155,38 @@ for ($index = 1; $index -le $IncidentCount; $index++) {
         Start-Sleep -Milliseconds $DelayMs
     }
 
+    $maintenanceWindow = Invoke-IncidentApi -Method POST -Uri "$BaseUrl/api/maintenance-windows" -Body @{
+        title = "ELK maintenance $suffix"
+        description = "Dashboard demo maintenance window $index"
+        status = if ($index % 2 -eq 0) { "PLANNED" } else { "IN_PROGRESS" }
+        startTime = (Get-Date).AddMinutes(15).ToString("s")
+        endTime = (Get-Date).AddMinutes(75).ToString("s")
+        nodeIds = @($networkNode.id)
+    }
+    Write-Host "Created maintenance window $($maintenanceWindow.id)"
+    Start-Sleep -Milliseconds $DelayMs
+
+    $alarmEvent = Invoke-IncidentApi -Method POST -Uri "$BaseUrl/api/alarm-events" -Body @{
+        sourceSystem = "DEMO"
+        externalId = "ALARM-DEMO-$suffix"
+        networkNodeId = $networkNode.id
+        incidentId = $createdIncident.id
+        alarmType = if ($sourceAlarmType -eq "POWER") { "POWER_FAILURE" } elseif ($sourceAlarmType -eq "PERFORMANCE") { "LATENCY_SPIKE" } elseif ($sourceAlarmType -eq "NETWORK") { "BGP_FLAP" } elseif ($sourceAlarmType -eq "CAPACITY") { "CPU_HIGH" } elseif ($sourceAlarmType -eq "MAINTENANCE") { "MAINTENANCE_MODE" } else { "CARD_FAILURE" }
+        severity = if ($sourceAlarmType -eq "CAPACITY") { "CRITICAL" } elseif ($sourceAlarmType -eq "PERFORMANCE" -or $sourceAlarmType -eq "MAINTENANCE") { "MINOR" } else { "MAJOR" }
+        status = if ($index % 2 -eq 0) { "ACKNOWLEDGED" } else { "OPEN" }
+        description = "Dashboard demo alarm for $incidentNumber"
+        suppressedByMaintenance = $false
+        occurredAt = (Get-Date).AddMinutes(-2).ToString("s")
+    }
+    Write-Host "Created alarm event $($alarmEvent.id): $($alarmEvent.externalId)"
+    Start-Sleep -Milliseconds $DelayMs
+
     [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/incidents?page=0&size=10&sortBy=openedAt&direction=desc")
     [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/incidents/$($createdIncident.id)")
     [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/incidents/$($createdIncident.id)/timeline")
+    [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/network-nodes?q=ELK-DEMO&region=$region")
+    [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/maintenance-windows")
+    [void](Invoke-IncidentApi -Method GET -Uri "$BaseUrl/api/alarm-events")
 }
 
 Write-Host "Demo traffic generation completed." -ForegroundColor Green
