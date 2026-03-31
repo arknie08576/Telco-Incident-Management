@@ -336,8 +336,8 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
         assertThat(updatedIncident.getIncidentNumber()).isEqualTo("INC-102E");
         assertThat(updatedIncident.getTitle()).isEqualTo("Updated incident title");
         assertThat(updatedIncident.getPriority()).isEqualTo(IncidentPriority.CRITICAL);
-        assertThat(updatedIncident.getRegion()).isEqualTo("SLASKIE");
-        assertThat(updatedIncident.getSourceAlarmType()).isEqualTo("POWER");
+        assertThat(updatedIncident.getRegion()).isEqualTo(Region.SLASKIE);
+        assertThat(updatedIncident.getSourceAlarmType()).isEqualTo(SourceAlarmType.POWER);
         assertThat(updatedIncident.getPossiblyPlanned()).isTrue();
         assertThat(timeline).hasSize(1);
         assertThat(timeline.getFirst().getEventType()).isEqualTo(IncidentTimelineEventType.UPDATED);
