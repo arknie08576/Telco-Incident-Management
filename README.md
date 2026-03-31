@@ -2,10 +2,11 @@
 
 Backend simulating a NOC (Network Operations Center) system for handling network incidents in a telco environment.
 
-The project currently focuses on the `incident` domain, but it already has foundations for:
-- correlations with `network_node`
-- integrations with `alarm_event`
-- awareness of `maintenance_window`
+The project covers the core operational domains used in the demo:
+- incidents
+- network inventory via `network_node`
+- maintenance planning via `maintenance_window`
+- monitoring integrations via `alarm_event`
 
 ## Project Scope
 
@@ -870,11 +871,14 @@ Test profile:
 ## Key Files
 
 - `src/main/java/pl/telco/incident/controller/IncidentController.java`
+- `src/main/java/pl/telco/incident/controller/AlarmEventController.java`
 - `src/main/java/pl/telco/incident/controller/MaintenanceWindowController.java`
 - `src/main/java/pl/telco/incident/controller/NetworkNodeController.java`
+- `src/main/java/pl/telco/incident/service/AlarmEventService.java`
 - `src/main/java/pl/telco/incident/service/IncidentService.java`
 - `src/main/java/pl/telco/incident/service/MaintenanceWindowService.java`
 - `src/main/java/pl/telco/incident/service/NetworkNodeService.java`
+- `src/main/java/pl/telco/incident/dto/AlarmEventUpdateRequest.java`
 - `src/main/java/pl/telco/incident/observability/ObservabilityEventLogger.java`
 - `src/main/java/pl/telco/incident/observability/TelcoAuditEntityListener.java`
 - `src/main/java/pl/telco/incident/repository/specification/IncidentSpecifications.java`
@@ -882,8 +886,10 @@ Test profile:
 - `src/main/java/pl/telco/incident/dto/MaintenanceWindowUpdateRequest.java`
 - `src/main/java/pl/telco/incident/config/OpenApiConfig.java`
 - `src/main/resources/db/migration/V3__add_incident_version_and_query_indexes.sql`
+- `src/test/java/pl/telco/incident/AlarmEventApiIntegrationTest.java`
 - `src/test/java/pl/telco/incident/IncidentApiIntegrationTest.java`
 - `src/test/java/pl/telco/incident/MaintenanceWindowApiIntegrationTest.java`
+- `src/test/java/pl/telco/incident/NetworkNodeApiIntegrationTest.java`
 - `src/test/java/pl/telco/incident/controller/IncidentControllerWebMvcTest.java`
 - `src/test/java/pl/telco/incident/service/IncidentServiceTest.java`
 
