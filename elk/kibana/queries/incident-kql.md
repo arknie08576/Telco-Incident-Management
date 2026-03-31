@@ -1,43 +1,85 @@
-# Incident KQL Pack
+# Platform KQL Pack
 
-Wszystkie logi biznesowe incidentow:
+Wszystkie zdarzenia platformowe:
 
 ```text
-eventDataset : "incident"
+eventDataset : *
 ```
 
-Tylko zamkniecia incidentow:
+Tylko ruch HTTP:
 
 ```text
-eventDataset : "incident" and eventAction : "close"
+eventDataset : "http"
 ```
 
-Zdarzenia dla jednego numeru incidentu:
+HTTP z bledami 4xx i 5xx:
 
 ```text
-incidentNumber : "INC-103"
+eventDataset : "http" and status >= 400
 ```
 
-Incidenty krytyczne w danym regionie:
+Bledy aplikacyjne backendu:
 
 ```text
-eventDataset : "incident" and priority : "CRITICAL" and region : "MAZOWIECKIE"
+eventDataset : "system" and eventCategory : "application_error"
 ```
 
-Operacje z action note:
+Incydenty, tylko lifecycle:
 
 ```text
-eventDataset : "incident" and noteProvided : true
+eventDataset : "incident" and timelineEventType : *
 ```
 
-Bledy HTTP dla incident API:
+Incydenty dla jednego priorytetu:
 
 ```text
-path : "/api/incidents" and status >= 400
+eventDataset : "incident" and priority : "CRITICAL"
 ```
 
-Zmiany biznesowe w patch update:
+Incydenty dla jednego regionu:
 
 ```text
-eventDataset : "incident" and eventAction : "update"
+eventDataset : "incident" and region : "SLASKIE"
+```
+
+Persistence wedlug tabel:
+
+```text
+eventCategory : "persistence" and tableName : *
+```
+
+Alarmy wedlug severity:
+
+```text
+eventDataset : "alarm" and severity : *
+```
+
+Maintenance wedlug statusu:
+
+```text
+eventDataset : "maintenance" and maintenanceStatus : *
+```
+
+Lookupi network node:
+
+```text
+eventDataset : "network_node" and eventCategory : "lookup"
+```
+
+Top endpointy HTTP:
+
+```text
+eventDataset : "http" and path : *
+```
+
+Jedno ID incydentu w wielu datasetach:
+
+```text
+incidentId : 42
+```
+
+Jedno request ID przez caly flow:
+
+```text
+requestId : "wklej-request-id"
 ```
