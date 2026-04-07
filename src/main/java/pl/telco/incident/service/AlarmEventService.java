@@ -26,9 +26,7 @@ import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
 import java.time.LocalDateTime;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -151,12 +149,12 @@ public class AlarmEventService {
 
     @Transactional(readOnly = true)
     public Page<AlarmEventResponse> getAlarmEvents(AlarmEventFilterRequest filter) {
-        validateSortBy(filter.getSortBy());
+        FilterUtils.validateSortBy(filter.getSortBy(), ALLOWED_SORT_FIELDS);
 
-        Set<AlarmSeverity> severityFilters = mergeSeverityFilters(filter.getSeverity(), filter.getSeverities());
-        Set<AlarmStatus> statusFilters = mergeStatusFilters(filter.getStatus(), filter.getStatuses());
-        Sort.Direction sortDirection = parseSortDirection(filter.getDirection());
-        Pageable pageable = PageRequest.of(filter.getPage(), filter.getSize(), buildSort(filter.getSortBy(), sortDirection));
+        Set<AlarmSeverity> severityFilters = FilterUtils.mergeEnumFilters(filter.getSeverity(), filter.getSeverities(), AlarmSeverity.class, "severities");
+        Set<AlarmStatus> statusFilters = FilterUtils.mergeEnumFilters(filter.getStatus(), filter.getStatuses(), AlarmStatus.class, "statuses");
+        Sort.Direction sortDirection = FilterUtils.parseSortDirection(filter.getDirection());
+        Pageable pageable = PageRequest.of(filter.getPage(), filter.getSize(), FilterUtils.buildSort(filter.getSortBy(), sortDirection, ALLOWED_SORT_FIELDS));
 
         Specification<AlarmEvent> specification = Specification
                 .where(hasSeverities(severityFilters))
@@ -203,76 +201,4 @@ public class AlarmEventService {
                 .orElseThrow(() -> new ResourceNotFoundException("Incident not found: " + incidentId));
     }
 
-    private void validateSortBy(String sortBy) {
-        if (!ALLOWED_SORT_FIELDS.containsKey(sortBy)) {
-            throw new BadRequestException("Unsupported sortBy value: " + sortBy);
-        }
-    }
-
-    private Sort.Direction parseSortDirection(String direction) {
-        try {
-            return Sort.Direction.fromString(direction);
-        } catch (IllegalArgumentException ex) {
-            throw new BadRequestException("Unsupported direction value: " + direction);
-        }
-    }
-
-    private Set<AlarmSeverity> mergeSeverityFilters(AlarmSeverity severity, List<String> severities) {
-        LinkedHashSet<AlarmSeverity> merged = new LinkedHashSet<>();
-
-        if (severity != null) {
-            merged.add(severity);
-        }
-        merged.addAll(parseEnumFilters(severities, AlarmSeverity.class, "severities"));
-
-        return merged;
-    }
-
-    private Set<AlarmStatus> mergeStatusFilters(AlarmStatus status, List<String> statuses) {
-        LinkedHashSet<AlarmStatus> merged = new LinkedHashSet<>();
-
-        if (status != null) {
-            merged.add(status);
-        }
-        merged.addAll(parseEnumFilters(statuses, AlarmStatus.class, "statuses"));
-
-        return merged;
-    }
-
-    private <E extends Enum<E>> Set<E> parseEnumFilters(List<String> rawValues, Class<E> enumType, String parameterName) {
-        LinkedHashSet<E> parsedValues = new LinkedHashSet<>();
-
-        if (rawValues == null) {
-            return parsedValues;
-        }
-
-        for (String rawValue : rawValues) {
-            if (rawValue == null || rawValue.isBlank()) {
-                continue;
-            }
-
-            for (String token : rawValue.split(",")) {
-                String normalizedToken = token.trim();
-                if (normalizedToken.isEmpty()) {
-                    continue;
-                }
-
-                try {
-                    parsedValues.add(Enum.valueOf(enumType, normalizedToken.toUpperCase(Locale.ROOT)));
-                } catch (IllegalArgumentException ex) {
-                    throw new BadRequestException("Invalid value '%s' for parameter '%s'".formatted(normalizedToken, parameterName));
-                }
-            }
-        }
-
-        return parsedValues;
-    }
-
-    private Sort buildSort(String sortBy, Sort.Direction direction) {
-        Sort sort = Sort.by(direction, ALLOWED_SORT_FIELDS.get(sortBy));
-        if (!"id".equals(sortBy)) {
-            sort = sort.and(Sort.by(Sort.Direction.DESC, "id"));
-        }
-        return sort;
-    }
 }

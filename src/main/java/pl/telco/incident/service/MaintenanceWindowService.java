@@ -27,7 +27,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -156,11 +155,11 @@ public class MaintenanceWindowService {
 
     @Transactional(readOnly = true)
     public Page<MaintenanceWindowResponse> getMaintenanceWindows(MaintenanceWindowFilterRequest filter) {
-        validateSortBy(filter.getSortBy());
+        FilterUtils.validateSortBy(filter.getSortBy(), ALLOWED_SORT_FIELDS);
 
-        Set<MaintenanceStatus> statusFilters = mergeStatusFilters(filter.getStatus(), filter.getStatuses());
-        Sort.Direction sortDirection = parseSortDirection(filter.getDirection());
-        Pageable pageable = PageRequest.of(filter.getPage(), filter.getSize(), buildSort(filter.getSortBy(), sortDirection));
+        Set<MaintenanceStatus> statusFilters = FilterUtils.mergeEnumFilters(filter.getStatus(), filter.getStatuses(), MaintenanceStatus.class, "statuses");
+        Sort.Direction sortDirection = FilterUtils.parseSortDirection(filter.getDirection());
+        Pageable pageable = PageRequest.of(filter.getPage(), filter.getSize(), FilterUtils.buildSort(filter.getSortBy(), sortDirection, ALLOWED_SORT_FIELDS));
 
         Specification<MaintenanceWindow> specification = Specification
                 .where(hasStatuses(statusFilters))
@@ -222,65 +221,4 @@ public class MaintenanceWindowService {
         return nodesById;
     }
 
-    private void validateSortBy(String sortBy) {
-        if (!ALLOWED_SORT_FIELDS.containsKey(sortBy)) {
-            throw new BadRequestException("Unsupported sortBy value: " + sortBy);
-        }
-    }
-
-    private Sort.Direction parseSortDirection(String direction) {
-        try {
-            return Sort.Direction.fromString(direction);
-        } catch (IllegalArgumentException ex) {
-            throw new BadRequestException("Unsupported direction value: " + direction);
-        }
-    }
-
-    private Set<MaintenanceStatus> mergeStatusFilters(MaintenanceStatus status, List<String> statuses) {
-        LinkedHashSet<MaintenanceStatus> merged = new LinkedHashSet<>();
-
-        if (status != null) {
-            merged.add(status);
-        }
-        merged.addAll(parseEnumFilters(statuses, MaintenanceStatus.class, "statuses"));
-
-        return merged;
-    }
-
-    private <E extends Enum<E>> Set<E> parseEnumFilters(List<String> rawValues, Class<E> enumType, String parameterName) {
-        LinkedHashSet<E> parsedValues = new LinkedHashSet<>();
-
-        if (rawValues == null) {
-            return parsedValues;
-        }
-
-        for (String rawValue : rawValues) {
-            if (rawValue == null || rawValue.isBlank()) {
-                continue;
-            }
-
-            for (String token : rawValue.split(",")) {
-                String normalizedToken = token.trim();
-                if (normalizedToken.isEmpty()) {
-                    continue;
-                }
-
-                try {
-                    parsedValues.add(Enum.valueOf(enumType, normalizedToken.toUpperCase(Locale.ROOT)));
-                } catch (IllegalArgumentException ex) {
-                    throw new BadRequestException("Invalid value '%s' for parameter '%s'".formatted(normalizedToken, parameterName));
-                }
-            }
-        }
-
-        return parsedValues;
-    }
-
-    private Sort buildSort(String sortBy, Sort.Direction direction) {
-        Sort sort = Sort.by(direction, ALLOWED_SORT_FIELDS.get(sortBy));
-        if (!"id".equals(sortBy)) {
-            sort = sort.and(Sort.by(Sort.Direction.DESC, "id"));
-        }
-        return sort;
-    }
 }

@@ -41,7 +41,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -137,11 +136,11 @@ public class IncidentService {
 
     @Transactional(readOnly = true)
     public Page<IncidentSummaryResponse> getAllIncidents(IncidentFilterRequest filter) {
-        validateSortBy(filter.getSortBy());
+        FilterUtils.validateSortBy(filter.getSortBy(), ALLOWED_SORT_FIELDS);
 
-        Set<IncidentPriority> priorityFilters = mergePriorityFilters(filter.getPriority(), filter.getPriorities());
-        Set<IncidentStatus> statusFilters = mergeStatusFilters(filter.getStatus(), filter.getStatuses());
-        Sort.Direction sortDirection = parseSortDirection(filter.getDirection());
+        Set<IncidentPriority> priorityFilters = FilterUtils.mergeEnumFilters(filter.getPriority(), filter.getPriorities(), IncidentPriority.class, "priorities");
+        Set<IncidentStatus> statusFilters = FilterUtils.mergeEnumFilters(filter.getStatus(), filter.getStatuses(), IncidentStatus.class, "statuses");
+        Sort.Direction sortDirection = FilterUtils.parseSortDirection(filter.getDirection());
         Pageable pageable = PageRequest.of(filter.getPage(), filter.getSize());
 
         Specification<Incident> specification = Specification
@@ -415,20 +414,6 @@ public class IncidentService {
         }
     }
 
-    private void validateSortBy(String sortBy) {
-        if (!ALLOWED_SORT_FIELDS.contains(sortBy)) {
-            throw new BadRequestException("Unsupported sortBy value: " + sortBy);
-        }
-    }
-
-    private Sort.Direction parseSortDirection(String direction) {
-        try {
-            return Sort.Direction.fromString(direction);
-        } catch (IllegalArgumentException ex) {
-            throw new BadRequestException("Unsupported direction value: " + direction);
-        }
-    }
-
     private Specification<Incident> withSort(String sortBy, Sort.Direction sortDirection) {
         return (root, query, cb) -> {
             if (query != null && !isCountQuery(query.getResultType())) {
@@ -557,58 +542,6 @@ public class IncidentService {
 
         return networkNodeRepository.findAllById(requestedNodeIds).stream()
                 .collect(Collectors.toMap(NetworkNode::getId, node -> node));
-    }
-
-    private Set<IncidentPriority> mergePriorityFilters(IncidentPriority priority, List<String> priorities) {
-        LinkedHashSet<IncidentPriority> merged = new LinkedHashSet<>();
-
-        if (priority != null) {
-            merged.add(priority);
-        }
-        merged.addAll(parseEnumFilters(priorities, IncidentPriority.class, "priorities"));
-
-        return merged;
-    }
-
-    private Set<IncidentStatus> mergeStatusFilters(IncidentStatus status, List<String> statuses) {
-        LinkedHashSet<IncidentStatus> merged = new LinkedHashSet<>();
-
-        if (status != null) {
-            merged.add(status);
-        }
-        merged.addAll(parseEnumFilters(statuses, IncidentStatus.class, "statuses"));
-
-        return merged;
-    }
-
-    private <E extends Enum<E>> Set<E> parseEnumFilters(List<String> rawValues, Class<E> enumType, String parameterName) {
-        LinkedHashSet<E> parsedValues = new LinkedHashSet<>();
-
-        if (rawValues == null) {
-            return parsedValues;
-        }
-
-        for (String rawValue : rawValues) {
-            if (rawValue == null || rawValue.isBlank()) {
-                continue;
-            }
-
-            for (String token : rawValue.split(",")) {
-                String normalizedToken = token.trim();
-
-                if (normalizedToken.isEmpty()) {
-                    continue;
-                }
-
-                try {
-                    parsedValues.add(Enum.valueOf(enumType, normalizedToken.toUpperCase(Locale.ROOT)));
-                } catch (IllegalArgumentException ex) {
-                    throw new BadRequestException("Invalid value '%s' for parameter '%s'".formatted(normalizedToken, parameterName));
-                }
-            }
-        }
-
-        return parsedValues;
     }
 
     private void applyStringUpdate(
