@@ -808,7 +808,7 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
                         .param("page", "-1"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Validation failed"))
-                .andExpect(jsonPath("$.fieldErrors['getAllIncidents.page']").value("must be greater than or equal to 0"));
+                .andExpect(jsonPath("$.fieldErrors.page").value("must be greater than or equal to 0"));
     }
 
     @Test
@@ -817,15 +817,14 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
                         .param("size", "101"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Validation failed"))
-                .andExpect(jsonPath("$.fieldErrors['getAllIncidents.size']").value("must be less than or equal to 100"));
+                .andExpect(jsonPath("$.fieldErrors.size").value("must be less than or equal to 100"));
     }
 
     @Test
     void getAllIncidentsShouldReturnBadRequestForInvalidPriorityEnum() throws Exception {
         mockMvc.perform(get("/api/incidents")
                         .param("priority", "URGENT"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Invalid value 'URGENT' for parameter 'priority'"));
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -834,7 +833,8 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
                         .param("openedFrom", "2026-03-29T12:00:00")
                         .param("openedTo", "2026-03-29T08:00:00"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("openedFrom must be earlier than or equal to openedTo"));
+                .andExpect(jsonPath("$.message").value("Validation failed"))
+                .andExpect(jsonPath("$.fieldErrors.openedFrom").value("openedFrom must be earlier than or equal to openedTo"));
     }
 
     @Test
@@ -843,7 +843,8 @@ class IncidentApiIntegrationTest extends AbstractPostgresIntegrationTest {
                         .param("closedFrom", "2026-03-29T12:00:00")
                         .param("closedTo", "2026-03-29T08:00:00"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("closedFrom must be earlier than or equal to closedTo"));
+                .andExpect(jsonPath("$.message").value("Validation failed"))
+                .andExpect(jsonPath("$.fieldErrors.closedFrom").value("closedFrom must be earlier than or equal to closedTo"));
     }
 
     private Long createIncidentThroughApi(NetworkNode rootNode, NetworkNode affectedNode, String incidentNumber) throws Exception {

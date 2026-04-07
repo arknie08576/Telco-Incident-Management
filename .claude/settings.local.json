@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -n \"public.*\\(\" /c/Users/arkni/IdeaProjects/Telco-Incident-Management/src/main/java/pl/telco/incident/service/*.java)"
+      "Bash(grep -n \"public.*\\(\" /c/Users/arkni/IdeaProjects/Telco-Incident-Management/src/main/java/pl/telco/incident/service/*.java)",
+      "Bash(./mvnw test-compile:*)",
+      "Bash(mvn test-compile:*)",
+      "Bash(ls C:/Users/arkni/IdeaProjects/Telco-Incident-Management/mvnw*)",
+      "Bash(cmd.exe //c \"mvnw.cmd test-compile -q\")",
+      "Bash(cmd.exe //c \".\\\\mvnw.cmd test-compile -q\")",
+      "Bash(bash mvnw:*)",
+      "Read(//c/Users/arkni/AppData/Local/JetBrains/Toolbox/apps/**)",
+      "Read(//c/Program Files/**)"
     ]
   }
 }

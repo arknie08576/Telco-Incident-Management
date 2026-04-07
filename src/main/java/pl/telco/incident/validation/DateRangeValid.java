@@ -33,12 +33,7 @@ public @interface DateRangeValid {
 
     @Target({ElementType.TYPE, ElementType.ANNOTATION_TYPE})
     @Retention(RetentionPolicy.RUNTIME)
-    @Constraint(validatedBy = {})
     @interface List {
         DateRangeValid[] value();
-
-        Class<?>[] groups() default {};
-
-        Class<? extends Payload>[] payload() default {};
     }
 }

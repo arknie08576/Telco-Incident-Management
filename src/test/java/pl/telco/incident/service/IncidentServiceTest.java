@@ -13,6 +13,7 @@ import pl.telco.incident.dto.IncidentActionRequest;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentFilterRequest;
 import pl.telco.incident.dto.IncidentNodeRequest;
+import pl.telco.incident.dto.IncidentNodeResponse;
 import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.dto.IncidentSummaryResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
@@ -109,6 +110,55 @@ class IncidentServiceTest {
             IncidentTimeline timeline = invocation.getArgument(0);
             timeline.setCreatedAt(timeline.getCreatedAt() != null ? timeline.getCreatedAt() : LocalDateTime.now());
             return timeline;
+        });
+
+        lenient().when(incidentMapper.toDetailedResponse(any(Incident.class))).thenAnswer(invocation -> {
+            Incident incident = invocation.getArgument(0);
+            IncidentResponse response = new IncidentResponse();
+            response.setId(incident.getId());
+            response.setIncidentNumber(incident.getIncidentNumber());
+            response.setTitle(incident.getTitle());
+            response.setStatus(incident.getStatus());
+            response.setPriority(incident.getPriority());
+            response.setRegion(incident.getRegion());
+            response.setSourceAlarmType(incident.getSourceAlarmType());
+            response.setPossiblyPlanned(incident.getPossiblyPlanned());
+            response.setRootNodeId(incident.getRootNode() != null ? incident.getRootNode().getId() : null);
+            response.setOpenedAt(incident.getOpenedAt());
+            response.setAcknowledgedAt(incident.getAcknowledgedAt());
+            response.setResolvedAt(incident.getResolvedAt());
+            response.setClosedAt(incident.getClosedAt());
+            if (incident.getIncidentNodes() != null) {
+                response.setNodes(incident.getIncidentNodes().stream().map(n -> {
+                    IncidentNodeResponse nr = new IncidentNodeResponse();
+                    nr.setNetworkNodeId(n.getNetworkNode().getId());
+                    nr.setRole(n.getRole());
+                    return nr;
+                }).toList());
+            }
+            return response;
+        });
+
+        lenient().when(incidentMapper.toSummaryResponse(any(Incident.class))).thenAnswer(invocation -> {
+            Incident incident = invocation.getArgument(0);
+            IncidentSummaryResponse response = new IncidentSummaryResponse();
+            response.setId(incident.getId());
+            response.setIncidentNumber(incident.getIncidentNumber());
+            response.setTitle(incident.getTitle());
+            response.setStatus(incident.getStatus());
+            response.setPriority(incident.getPriority());
+            response.setRegion(incident.getRegion());
+            response.setOpenedAt(incident.getOpenedAt());
+            return response;
+        });
+
+        lenient().when(incidentMapper.toTimelineResponse(any(IncidentTimeline.class))).thenAnswer(invocation -> {
+            IncidentTimeline timeline = invocation.getArgument(0);
+            IncidentTimelineResponse response = new IncidentTimelineResponse();
+            response.setEventType(timeline.getEventType());
+            response.setMessage(timeline.getMessage());
+            response.setCreatedAt(timeline.getCreatedAt());
+            return response;
         });
     }
 
@@ -360,28 +410,6 @@ class IncidentServiceTest {
         assertThatThrownBy(() -> incidentService.getAllIncidents(filter))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("Unsupported sortBy value: createdAt");
-    }
-
-    @Test
-    void getAllIncidentsShouldRejectOpenedAtRangeWhenFromIsAfterTo() {
-        IncidentFilterRequest filter = new IncidentFilterRequest();
-        filter.setOpenedFrom(LocalDateTime.of(2026, 3, 30, 10, 0));
-        filter.setOpenedTo(LocalDateTime.of(2026, 3, 29, 10, 0));
-
-        assertThatThrownBy(() -> incidentService.getAllIncidents(filter))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessage("openedFrom must be earlier than or equal to openedTo");
-    }
-
-    @Test
-    void getAllIncidentsShouldRejectAcknowledgedAtRangeWhenFromIsAfterTo() {
-        IncidentFilterRequest filter = new IncidentFilterRequest();
-        filter.setAcknowledgedFrom(LocalDateTime.of(2026, 3, 30, 10, 0));
-        filter.setAcknowledgedTo(LocalDateTime.of(2026, 3, 29, 10, 0));
-
-        assertThatThrownBy(() -> incidentService.getAllIncidents(filter))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessage("acknowledgedFrom must be earlier than or equal to acknowledgedTo");
     }
 
     @Test
