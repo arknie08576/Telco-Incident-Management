@@ -1,14 +1,20 @@
 package pl.telco.incident.observability;
 
 import org.junit.jupiter.api.Test;
+import pl.telco.incident.entity.AlarmEvent;
 import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.IncidentNode;
 import pl.telco.incident.entity.IncidentTimeline;
+import pl.telco.incident.entity.MaintenanceNode;
+import pl.telco.incident.entity.MaintenanceWindow;
 import pl.telco.incident.entity.NetworkNode;
+import pl.telco.incident.entity.enums.AlarmSeverity;
+import pl.telco.incident.entity.enums.AlarmStatus;
 import pl.telco.incident.entity.enums.IncidentNodeRole;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.entity.enums.IncidentTimelineEventType;
+import pl.telco.incident.entity.enums.MaintenanceStatus;
 import pl.telco.incident.entity.enums.NodeType;
 import pl.telco.incident.entity.enums.Region;
 import pl.telco.incident.entity.enums.SourceAlarmType;
@@ -93,5 +99,46 @@ class AuditFieldExtractorTest {
         assertThat(nodeFields.get("networkNodeId")).isEqualTo(5L);
         assertThat(timelineFields.get("entityType")).isEqualTo("IncidentTimeline");
         assertThat(timelineFields.get("timelineEventType")).isEqualTo(IncidentTimelineEventType.RESOLVED);
+    }
+
+    @Test
+    void shouldExtractMaintenanceAndAlarmFields() {
+        NetworkNode networkNode = NetworkNode.builder().id(9L).build();
+        Incident incident = Incident.builder().id(12L).build();
+
+        MaintenanceWindow maintenanceWindow = new MaintenanceWindow();
+        maintenanceWindow.setId(100L);
+        maintenanceWindow.setTitle("Backbone maintenance");
+        maintenanceWindow.setStatus(MaintenanceStatus.IN_PROGRESS);
+
+        MaintenanceNode maintenanceNode = new MaintenanceNode();
+        maintenanceNode.setId(101L);
+        maintenanceNode.setMaintenanceWindow(maintenanceWindow);
+        maintenanceNode.setNetworkNode(networkNode);
+
+        AlarmEvent alarmEvent = new AlarmEvent();
+        alarmEvent.setId(200L);
+        alarmEvent.setSourceSystem("OSS");
+        alarmEvent.setExternalId("ALARM-200");
+        alarmEvent.setNetworkNode(networkNode);
+        alarmEvent.setIncident(incident);
+        alarmEvent.setAlarmType("LINK_DOWN");
+        alarmEvent.setSeverity(AlarmSeverity.CRITICAL);
+        alarmEvent.setStatus(AlarmStatus.OPEN);
+        alarmEvent.setSuppressedByMaintenance(true);
+
+        Map<String, Object> maintenanceWindowFields = extractor.extract(maintenanceWindow, "insert");
+        Map<String, Object> maintenanceNodeFields = extractor.extract(maintenanceNode, "insert");
+        Map<String, Object> alarmFields = extractor.extract(alarmEvent, "insert");
+
+        assertThat(maintenanceWindowFields.get("eventDataset")).isEqualTo("maintenance");
+        assertThat(maintenanceWindowFields.get("entityType")).isEqualTo("MaintenanceWindow");
+        assertThat(maintenanceWindowFields.get("maintenanceStatus")).isEqualTo(MaintenanceStatus.IN_PROGRESS);
+        assertThat(maintenanceNodeFields.get("entityType")).isEqualTo("MaintenanceNode");
+        assertThat(maintenanceNodeFields.get("maintenanceWindowId")).isEqualTo(100L);
+        assertThat(alarmFields.get("eventDataset")).isEqualTo("alarm");
+        assertThat(alarmFields.get("entityType")).isEqualTo("AlarmEvent");
+        assertThat(alarmFields.get("incidentId")).isEqualTo(12L);
+        assertThat(alarmFields.get("alarmStatus")).isEqualTo(AlarmStatus.OPEN);
     }
 }

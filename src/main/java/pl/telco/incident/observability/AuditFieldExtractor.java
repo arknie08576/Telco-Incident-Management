@@ -1,9 +1,12 @@
 package pl.telco.incident.observability;
 
 import org.springframework.stereotype.Component;
+import pl.telco.incident.entity.AlarmEvent;
 import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.IncidentNode;
 import pl.telco.incident.entity.IncidentTimeline;
+import pl.telco.incident.entity.MaintenanceNode;
+import pl.telco.incident.entity.MaintenanceWindow;
 import pl.telco.incident.entity.NetworkNode;
 
 import java.util.LinkedHashMap;
@@ -62,6 +65,44 @@ public class AuditFieldExtractor {
             fields.put("region", networkNode.getRegion());
             fields.put("vendor", networkNode.getVendor());
             fields.put("active", networkNode.getActive());
+            return fields;
+        }
+
+        if (entity instanceof MaintenanceWindow maintenanceWindow) {
+            fields.put("eventDataset", "maintenance");
+            fields.put("entityType", "MaintenanceWindow");
+            fields.put("tableName", "maintenance_window");
+            fields.put("entityId", maintenanceWindow.getId());
+            fields.put("title", maintenanceWindow.getTitle());
+            fields.put("maintenanceStatus", maintenanceWindow.getStatus());
+            fields.put("startTime", maintenanceWindow.getStartTime());
+            fields.put("endTime", maintenanceWindow.getEndTime());
+            return fields;
+        }
+
+        if (entity instanceof MaintenanceNode maintenanceNode) {
+            fields.put("eventDataset", "maintenance");
+            fields.put("entityType", "MaintenanceNode");
+            fields.put("tableName", "maintenance_node");
+            fields.put("entityId", maintenanceNode.getId());
+            fields.put("maintenanceWindowId", maintenanceNode.getMaintenanceWindow() != null ? maintenanceNode.getMaintenanceWindow().getId() : null);
+            fields.put("networkNodeId", maintenanceNode.getNetworkNode() != null ? maintenanceNode.getNetworkNode().getId() : null);
+            return fields;
+        }
+
+        if (entity instanceof AlarmEvent alarmEvent) {
+            fields.put("eventDataset", "alarm");
+            fields.put("entityType", "AlarmEvent");
+            fields.put("tableName", "alarm_event");
+            fields.put("entityId", alarmEvent.getId());
+            fields.put("sourceSystem", alarmEvent.getSourceSystem());
+            fields.put("externalId", alarmEvent.getExternalId());
+            fields.put("networkNodeId", alarmEvent.getNetworkNode() != null ? alarmEvent.getNetworkNode().getId() : null);
+            fields.put("incidentId", alarmEvent.getIncident() != null ? alarmEvent.getIncident().getId() : null);
+            fields.put("alarmType", alarmEvent.getAlarmType());
+            fields.put("severity", alarmEvent.getSeverity());
+            fields.put("alarmStatus", alarmEvent.getStatus());
+            fields.put("suppressedByMaintenance", alarmEvent.getSuppressedByMaintenance());
             return fields;
         }
 

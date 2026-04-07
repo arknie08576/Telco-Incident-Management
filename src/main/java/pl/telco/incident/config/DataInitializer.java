@@ -5,18 +5,28 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.jdbc.core.JdbcTemplate;
+import pl.telco.incident.entity.AlarmEvent;
 import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.IncidentNode;
+import pl.telco.incident.entity.IncidentTimeline;
+import pl.telco.incident.entity.MaintenanceNode;
+import pl.telco.incident.entity.MaintenanceWindow;
 import pl.telco.incident.entity.NetworkNode;
+import pl.telco.incident.entity.enums.AlarmSeverity;
+import pl.telco.incident.entity.enums.AlarmStatus;
 import pl.telco.incident.entity.enums.IncidentNodeRole;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
+import pl.telco.incident.entity.enums.IncidentTimelineEventType;
+import pl.telco.incident.entity.enums.MaintenanceStatus;
 import pl.telco.incident.entity.enums.NodeType;
 import pl.telco.incident.entity.enums.Region;
 import pl.telco.incident.entity.enums.SourceAlarmType;
 import pl.telco.incident.observability.ObservabilityEventLogger;
+import pl.telco.incident.repository.AlarmEventRepository;
 import pl.telco.incident.repository.IncidentRepository;
+import pl.telco.incident.repository.IncidentTimelineRepository;
+import pl.telco.incident.repository.MaintenanceWindowRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
 import java.time.LocalDateTime;
@@ -30,7 +40,9 @@ public class DataInitializer {
 
     private final NetworkNodeRepository networkNodeRepository;
     private final IncidentRepository incidentRepository;
-    private final JdbcTemplate jdbcTemplate;
+    private final MaintenanceWindowRepository maintenanceWindowRepository;
+    private final AlarmEventRepository alarmEventRepository;
+    private final IncidentTimelineRepository incidentTimelineRepository;
     private final ObservabilityEventLogger observabilityEventLogger;
 
     @Bean
@@ -126,9 +138,9 @@ public class DataInitializer {
         inc1.setOpenedAt(now.minusHours(2));
         inc1.setCreatedAt(now.minusHours(2));
         inc1.setUpdatedAt(now.minusHours(2));
-        inc1.addIncidentNode(createNode(router, IncidentNodeRole.ROOT));
-        inc1.addIncidentNode(createNode(gnb1, IncidentNodeRole.AFFECTED));
-        inc1.addIncidentNode(createNode(gnb2, IncidentNodeRole.AFFECTED));
+        inc1.addIncidentNode(createIncidentNode(router, IncidentNodeRole.ROOT));
+        inc1.addIncidentNode(createIncidentNode(gnb1, IncidentNodeRole.AFFECTED));
+        inc1.addIncidentNode(createIncidentNode(gnb2, IncidentNodeRole.AFFECTED));
 
         Incident inc2 = new Incident();
         inc2.setIncidentNumber("INC-002");
@@ -143,8 +155,8 @@ public class DataInitializer {
         inc2.setAcknowledgedAt(now.minusHours(5));
         inc2.setCreatedAt(now.minusHours(6));
         inc2.setUpdatedAt(now.minusHours(5));
-        inc2.addIncidentNode(createNode(gnb1, IncidentNodeRole.ROOT));
-        inc2.addIncidentNode(createNode(gnb2, IncidentNodeRole.AFFECTED));
+        inc2.addIncidentNode(createIncidentNode(gnb1, IncidentNodeRole.ROOT));
+        inc2.addIncidentNode(createIncidentNode(gnb2, IncidentNodeRole.AFFECTED));
 
         Incident inc3 = new Incident();
         inc3.setIncidentNumber("INC-003");
@@ -160,9 +172,9 @@ public class DataInitializer {
         inc3.setResolvedAt(now.minusHours(4));
         inc3.setCreatedAt(now.minusDays(1));
         inc3.setUpdatedAt(now.minusHours(4));
-        inc3.addIncidentNode(createNode(sbc, IncidentNodeRole.ROOT));
-        inc3.addIncidentNode(createNode(router, IncidentNodeRole.AFFECTED));
-        inc3.addIncidentNode(createNode(gnb1, IncidentNodeRole.AFFECTED));
+        inc3.addIncidentNode(createIncidentNode(sbc, IncidentNodeRole.ROOT));
+        inc3.addIncidentNode(createIncidentNode(router, IncidentNodeRole.AFFECTED));
+        inc3.addIncidentNode(createIncidentNode(gnb1, IncidentNodeRole.AFFECTED));
 
         Incident inc4 = new Incident();
         inc4.setIncidentNumber("INC-004");
@@ -176,7 +188,7 @@ public class DataInitializer {
         inc4.setOpenedAt(now.minusDays(2));
         inc4.setCreatedAt(now.minusDays(2));
         inc4.setUpdatedAt(now.minusDays(2));
-        inc4.addIncidentNode(createNode(enb, IncidentNodeRole.ROOT));
+        inc4.addIncidentNode(createIncidentNode(enb, IncidentNodeRole.ROOT));
 
         Incident inc5 = new Incident();
         inc5.setIncidentNumber("INC-005");
@@ -193,8 +205,8 @@ public class DataInitializer {
         inc5.setClosedAt(now.minusDays(4).plusHours(4));
         inc5.setCreatedAt(now.minusDays(5));
         inc5.setUpdatedAt(now.minusDays(4).plusHours(4));
-        inc5.addIncidentNode(createNode(gnb2, IncidentNodeRole.ROOT));
-        inc5.addIncidentNode(createNode(gnb1, IncidentNodeRole.AFFECTED));
+        inc5.addIncidentNode(createIncidentNode(gnb2, IncidentNodeRole.ROOT));
+        inc5.addIncidentNode(createIncidentNode(gnb1, IncidentNodeRole.AFFECTED));
 
         Incident inc6 = new Incident();
         inc6.setIncidentNumber("INC-006");
@@ -208,9 +220,9 @@ public class DataInitializer {
         inc6.setOpenedAt(now.minusHours(10));
         inc6.setCreatedAt(now.minusHours(10));
         inc6.setUpdatedAt(now.minusHours(10));
-        inc6.addIncidentNode(createNode(gnb1, IncidentNodeRole.ROOT));
-        inc6.addIncidentNode(createNode(enb, IncidentNodeRole.AFFECTED));
-        inc6.addIncidentNode(createNode(sbc, IncidentNodeRole.AFFECTED));
+        inc6.addIncidentNode(createIncidentNode(gnb1, IncidentNodeRole.ROOT));
+        inc6.addIncidentNode(createIncidentNode(enb, IncidentNodeRole.AFFECTED));
+        inc6.addIncidentNode(createIncidentNode(sbc, IncidentNodeRole.AFFECTED));
 
         incidentRepository.saveAll(List.of(inc1, inc2, inc3, inc4, inc5, inc6));
         incidentRepository.flush();
@@ -218,392 +230,221 @@ public class DataInitializer {
     }
 
     private void seedMaintenanceWindowsIfEmpty() {
-        Long count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM maintenance_window",
-                Long.class
-        );
-
-        if (count != null && count > 0) {
+        long count = maintenanceWindowRepository.count();
+        if (count > 0) {
             logSeedSkip("maintenance_window", count);
             return;
         }
 
         LocalDateTime now = LocalDateTime.now();
 
-        jdbcTemplate.update("""
-                INSERT INTO maintenance_window (title, description, status, start_time, end_time, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                "Planned RAN upgrade - Krakow",
-                "Software upgrade for LTE/5G access nodes",
-                "PLANNED",
-                now.plusDays(1),
-                now.plusDays(1).plusHours(4),
-                now
-        );
+        MaintenanceWindow firstWindow = new MaintenanceWindow();
+        firstWindow.setTitle("Planned RAN upgrade - Krakow");
+        firstWindow.setDescription("Software upgrade for LTE/5G access nodes");
+        firstWindow.setStatus(MaintenanceStatus.PLANNED);
+        firstWindow.setStartTime(now.plusDays(1));
+        firstWindow.setEndTime(now.plusDays(1).plusHours(4));
+        firstWindow.setCreatedAt(now);
+        firstWindow.addMaintenanceNode(createMaintenanceNode(getNodeByName("RAN-ENB-WAW-01"), now));
+        firstWindow.addMaintenanceNode(createMaintenanceNode(getNodeByName("RAN-GNB-WAW-01"), now));
+
+        MaintenanceWindow secondWindow = new MaintenanceWindow();
+        secondWindow.setTitle("Core SBC patching");
+        secondWindow.setDescription("Security patch deployment on SBC layer");
+        secondWindow.setStatus(MaintenanceStatus.COMPLETED);
+        secondWindow.setStartTime(now.minusDays(3));
+        secondWindow.setEndTime(now.minusDays(3).plusHours(2));
+        secondWindow.setCreatedAt(now.minusDays(4));
+        secondWindow.addMaintenanceNode(createMaintenanceNode(getNodeByName("CORE-SBC-WAW-01"), now.minusDays(4)));
+
+        maintenanceWindowRepository.saveAll(List.of(firstWindow, secondWindow));
+        maintenanceWindowRepository.flush();
+
         logDatasetSeedEvent(
                 "maintenance",
                 "maintenance_window",
                 "insert",
-                Map.of(
-                        "title", "Planned RAN upgrade - Krakow",
-                        "maintenanceStatus", "PLANNED"
-                )
+                Map.of("title", firstWindow.getTitle(), "maintenanceStatus", firstWindow.getStatus())
         );
+        firstWindow.getMaintenanceNodes().forEach(node -> logDatasetSeedEvent(
+                "maintenance",
+                "maintenance_node",
+                "insert",
+                Map.of("maintenanceWindowId", firstWindow.getId(), "networkNodeId", node.getNetworkNode().getId())
+        ));
 
-        jdbcTemplate.update("""
-                INSERT INTO maintenance_window (title, description, status, start_time, end_time, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                "Core SBC patching",
-                "Security patch deployment on SBC layer",
-                "COMPLETED",
-                now.minusDays(3),
-                now.minusDays(3).plusHours(2),
-                now.minusDays(4)
-        );
         logDatasetSeedEvent(
                 "maintenance",
                 "maintenance_window",
                 "insert",
-                Map.of(
-                        "title", "Core SBC patching",
-                        "maintenanceStatus", "COMPLETED"
-                )
+                Map.of("title", secondWindow.getTitle(), "maintenanceStatus", secondWindow.getStatus())
         );
-
-        Long mw1Id = jdbcTemplate.queryForObject(
-                "SELECT id FROM maintenance_window WHERE title = ?",
-                Long.class,
-                "Planned RAN upgrade - Krakow"
-        );
-
-        Long mw2Id = jdbcTemplate.queryForObject(
-                "SELECT id FROM maintenance_window WHERE title = ?",
-                Long.class,
-                "Core SBC patching"
-        );
-
-        Long enbId = getNodeIdByName("RAN-ENB-WAW-01");
-        Long gnb1Id = getNodeIdByName("RAN-GNB-WAW-01");
-        Long sbcId = getNodeIdByName("CORE-SBC-WAW-01");
-
-        jdbcTemplate.update("""
-                INSERT INTO maintenance_node (maintenance_window_id, network_node_id, created_at)
-                VALUES (?, ?, ?)
-                """,
-                mw1Id, enbId, now
-        );
-        logDatasetSeedEvent(
+        secondWindow.getMaintenanceNodes().forEach(node -> logDatasetSeedEvent(
                 "maintenance",
                 "maintenance_node",
                 "insert",
-                Map.of("maintenanceWindowId", mw1Id, "networkNodeId", enbId)
-        );
-
-        jdbcTemplate.update("""
-                INSERT INTO maintenance_node (maintenance_window_id, network_node_id, created_at)
-                VALUES (?, ?, ?)
-                """,
-                mw1Id, gnb1Id, now
-        );
-        logDatasetSeedEvent(
-                "maintenance",
-                "maintenance_node",
-                "insert",
-                Map.of("maintenanceWindowId", mw1Id, "networkNodeId", gnb1Id)
-        );
-
-        jdbcTemplate.update("""
-                INSERT INTO maintenance_node (maintenance_window_id, network_node_id, created_at)
-                VALUES (?, ?, ?)
-                """,
-                mw2Id, sbcId, now.minusDays(4)
-        );
-        logDatasetSeedEvent(
-                "maintenance",
-                "maintenance_node",
-                "insert",
-                Map.of("maintenanceWindowId", mw2Id, "networkNodeId", sbcId)
-        );
+                Map.of("maintenanceWindowId", secondWindow.getId(), "networkNodeId", node.getNetworkNode().getId())
+        ));
     }
 
     private void seedAlarmEventsIfEmpty() {
-        Long count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM alarm_event",
-                Long.class
-        );
-
-        if (count != null && count > 0) {
+        long count = alarmEventRepository.count();
+        if (count > 0) {
             logSeedSkip("alarm_event", count);
             return;
         }
 
         LocalDateTime now = LocalDateTime.now();
 
-        Long routerId = getNodeIdByName("CORE-RTR-WAW-01");
-        Long gnb1Id = getNodeIdByName("RAN-GNB-WAW-01");
-        Long gnb2Id = getNodeIdByName("RAN-GNB-WAW-02");
-        Long enbId = getNodeIdByName("RAN-ENB-WAW-01");
-        Long sbcId = getNodeIdByName("CORE-SBC-WAW-01");
-
-        Long inc1Id = getIncidentIdByNumber("INC-001");
-        Long inc2Id = getIncidentIdByNumber("INC-002");
-        Long inc3Id = getIncidentIdByNumber("INC-003");
-        Long inc4Id = getIncidentIdByNumber("INC-004");
-        Long inc6Id = getIncidentIdByNumber("INC-006");
-
-        jdbcTemplate.update("""
-                INSERT INTO alarm_event (
-                    source_system, external_id, network_node_id, incident_id,
-                    alarm_type, severity, status, description,
-                    suppressed_by_maintenance, occurred_at, received_at, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+        AlarmEvent alarm1 = createAlarmEvent(
                 "OSS",
                 "ALARM-001",
-                routerId,
-                inc1Id,
+                getNodeByName("CORE-RTR-WAW-01"),
+                getIncidentByNumber("INC-001"),
                 "LINK_DOWN",
-                "MAJOR",
-                "OPEN",
+                AlarmSeverity.MAJOR,
+                AlarmStatus.OPEN,
                 "Core router uplink down",
                 false,
                 now.minusHours(2),
                 now.minusHours(2).plusMinutes(1),
                 now.minusHours(2)
         );
-        logDatasetSeedEvent(
-                "alarm",
-                "alarm_event",
-                "insert",
-                Map.of("externalId", "ALARM-001", "alarmType", "LINK_DOWN", "incidentId", inc1Id, "networkNodeId", routerId)
-        );
 
-        jdbcTemplate.update("""
-                INSERT INTO alarm_event (
-                    source_system, external_id, network_node_id, incident_id,
-                    alarm_type, severity, status, description,
-                    suppressed_by_maintenance, occurred_at, received_at, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+        AlarmEvent alarm2 = createAlarmEvent(
                 "OSS",
                 "ALARM-002",
-                gnb1Id,
-                inc2Id,
+                getNodeByName("RAN-GNB-WAW-01"),
+                getIncidentByNumber("INC-002"),
                 "CELL_DEGRADED",
-                "MINOR",
-                "ACKNOWLEDGED",
+                AlarmSeverity.MINOR,
+                AlarmStatus.ACKNOWLEDGED,
                 "Degradation detected on 5G cell",
                 false,
                 now.minusHours(6),
                 now.minusHours(6).plusMinutes(2),
                 now.minusHours(6)
         );
-        logDatasetSeedEvent(
-                "alarm",
-                "alarm_event",
-                "insert",
-                Map.of("externalId", "ALARM-002", "alarmType", "CELL_DEGRADED", "incidentId", inc2Id, "networkNodeId", gnb1Id)
-        );
 
-        jdbcTemplate.update("""
-                INSERT INTO alarm_event (
-                    source_system, external_id, network_node_id, incident_id,
-                    alarm_type, severity, status, description,
-                    suppressed_by_maintenance, occurred_at, received_at, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+        AlarmEvent alarm3 = createAlarmEvent(
                 "EMS",
                 "ALARM-003",
-                sbcId,
-                inc3Id,
+                getNodeByName("CORE-SBC-WAW-01"),
+                getIncidentByNumber("INC-003"),
                 "CPU_HIGH",
-                "CRITICAL",
-                "CLEARED",
+                AlarmSeverity.CRITICAL,
+                AlarmStatus.CLEARED,
                 "SBC CPU overload",
                 false,
                 now.minusDays(1),
                 now.minusDays(1).plusMinutes(1),
                 now.minusDays(1)
         );
-        logDatasetSeedEvent(
-                "alarm",
-                "alarm_event",
-                "insert",
-                Map.of("externalId", "ALARM-003", "alarmType", "CPU_HIGH", "incidentId", inc3Id, "networkNodeId", sbcId)
-        );
 
-        jdbcTemplate.update("""
-                INSERT INTO alarm_event (
-                    source_system, external_id, network_node_id, incident_id,
-                    alarm_type, severity, status, description,
-                    suppressed_by_maintenance, occurred_at, received_at, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+        AlarmEvent alarm4 = createAlarmEvent(
                 "OSS",
                 "ALARM-004",
-                enbId,
-                inc4Id,
+                getNodeByName("RAN-ENB-WAW-01"),
+                getIncidentByNumber("INC-004"),
                 "MAINTENANCE_MODE",
-                "INFO",
-                "OPEN",
+                AlarmSeverity.INFO,
+                AlarmStatus.OPEN,
                 "Node in maintenance mode",
                 true,
                 now.minusDays(2),
                 now.minusDays(2).plusMinutes(1),
                 now.minusDays(2)
         );
-        logDatasetSeedEvent(
-                "alarm",
-                "alarm_event",
-                "insert",
-                Map.of("externalId", "ALARM-004", "alarmType", "MAINTENANCE_MODE", "incidentId", inc4Id, "networkNodeId", enbId)
-        );
 
-        jdbcTemplate.update("""
-                INSERT INTO alarm_event (
-                    source_system, external_id, network_node_id, incident_id,
-                    alarm_type, severity, status, description,
-                    suppressed_by_maintenance, occurred_at, received_at, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+        AlarmEvent alarm5 = createAlarmEvent(
                 "EMS",
                 "ALARM-005",
-                gnb2Id,
+                getNodeByName("RAN-GNB-WAW-02"),
                 null,
                 "PACKET_LOSS",
-                "MAJOR",
-                "OPEN",
+                AlarmSeverity.MAJOR,
+                AlarmStatus.OPEN,
                 "Packet loss detected but not yet correlated",
                 false,
                 now.minusHours(3),
                 now.minusHours(3).plusMinutes(1),
                 now.minusHours(3)
         );
-        logDatasetSeedEvent(
-                "alarm",
-                "alarm_event",
-                "insert",
-                nullableMap(
-                        "externalId", "ALARM-005",
-                        "alarmType", "PACKET_LOSS",
-                        "incidentId", null,
-                        "networkNodeId", gnb2Id
-                )
-        );
 
-        jdbcTemplate.update("""
-                INSERT INTO alarm_event (
-                    source_system, external_id, network_node_id, incident_id,
-                    alarm_type, severity, status, description,
-                    suppressed_by_maintenance, occurred_at, received_at, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+        AlarmEvent alarm6 = createAlarmEvent(
                 "OSS",
                 "ALARM-006",
-                gnb1Id,
-                inc6Id,
+                getNodeByName("RAN-GNB-WAW-01"),
+                getIncidentByNumber("INC-006"),
                 "REBOOT_LOOP",
-                "CRITICAL",
-                "OPEN",
+                AlarmSeverity.CRITICAL,
+                AlarmStatus.OPEN,
                 "Repeated reboot loop on gNodeB",
                 false,
                 now.minusHours(10),
                 now.minusHours(10).plusMinutes(1),
                 now.minusHours(10)
         );
-        logDatasetSeedEvent(
-                "alarm",
-                "alarm_event",
-                "insert",
-                Map.of("externalId", "ALARM-006", "alarmType", "REBOOT_LOOP", "incidentId", inc6Id, "networkNodeId", gnb1Id)
-        );
+
+        alarmEventRepository.saveAll(List.of(alarm1, alarm2, alarm3, alarm4, alarm5, alarm6));
+        alarmEventRepository.flush();
+
+        logAlarmSeedEvent(alarm1);
+        logAlarmSeedEvent(alarm2);
+        logAlarmSeedEvent(alarm3);
+        logAlarmSeedEvent(alarm4);
+        logAlarmSeedEvent(alarm5);
+        logAlarmSeedEvent(alarm6);
     }
 
     private void seedIncidentTimelineIfEmpty() {
-        Long count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM incident_timeline",
-                Long.class
-        );
-
-        if (count != null && count > 0) {
+        long count = incidentTimelineRepository.count();
+        if (count > 0) {
             logSeedSkip("incident_timeline", count);
             return;
         }
 
-        Long inc1Id = getIncidentIdByNumber("INC-001");
-        Long inc2Id = getIncidentIdByNumber("INC-002");
-        Long inc3Id = getIncidentIdByNumber("INC-003");
-        Long inc5Id = getIncidentIdByNumber("INC-005");
-        Long inc6Id = getIncidentIdByNumber("INC-006");
-
         LocalDateTime now = LocalDateTime.now();
 
-        jdbcTemplate.update("""
-                INSERT INTO incident_timeline (incident_id, event_type, message, created_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                inc1Id, "CREATED", "Incident created from router failure alarm", now.minusHours(2)
+        IncidentTimeline timeline1 = createTimelineEntry(
+                getIncidentByNumber("INC-001"),
+                IncidentTimelineEventType.CREATED,
+                "Incident created from router failure alarm",
+                now.minusHours(2)
         );
-        logDatasetSeedEvent(
-                "incident",
-                "incident_timeline",
-                "insert",
-                Map.of("incidentId", inc1Id, "timelineEventType", "CREATED")
+        IncidentTimeline timeline2 = createTimelineEntry(
+                getIncidentByNumber("INC-002"),
+                IncidentTimelineEventType.ACKNOWLEDGED,
+                "NOC engineer acknowledged cell degradation",
+                now.minusHours(5)
         );
-
-        jdbcTemplate.update("""
-                INSERT INTO incident_timeline (incident_id, event_type, message, created_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                inc2Id, "ACKNOWLEDGED", "NOC engineer acknowledged cell degradation", now.minusHours(5)
+        IncidentTimeline timeline3 = createTimelineEntry(
+                getIncidentByNumber("INC-003"),
+                IncidentTimelineEventType.RESOLVED,
+                "Traffic rebalanced and SBC CPU normalized",
+                now.minusHours(4)
         );
-        logDatasetSeedEvent(
-                "incident",
-                "incident_timeline",
-                "insert",
-                Map.of("incidentId", inc2Id, "timelineEventType", "ACKNOWLEDGED")
+        IncidentTimeline timeline4 = createTimelineEntry(
+                getIncidentByNumber("INC-005"),
+                IncidentTimelineEventType.CLOSED,
+                "Packet loss issue closed after verification",
+                now.minusDays(4)
         );
-
-        jdbcTemplate.update("""
-                INSERT INTO incident_timeline (incident_id, event_type, message, created_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                inc3Id, "RESOLVED", "Traffic rebalanced and SBC CPU normalized", now.minusHours(4)
-        );
-        logDatasetSeedEvent(
-                "incident",
-                "incident_timeline",
-                "insert",
-                Map.of("incidentId", inc3Id, "timelineEventType", "RESOLVED")
+        IncidentTimeline timeline5 = createTimelineEntry(
+                getIncidentByNumber("INC-006"),
+                IncidentTimelineEventType.CREATED,
+                "Incident opened due to repeated reboot loop",
+                now.minusHours(10)
         );
 
-        jdbcTemplate.update("""
-                INSERT INTO incident_timeline (incident_id, event_type, message, created_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                inc5Id, "CLOSED", "Packet loss issue closed after verification", now.minusDays(4)
-        );
-        logDatasetSeedEvent(
-                "incident",
-                "incident_timeline",
-                "insert",
-                Map.of("incidentId", inc5Id, "timelineEventType", "CLOSED")
-        );
+        incidentTimelineRepository.saveAll(List.of(timeline1, timeline2, timeline3, timeline4, timeline5));
+        incidentTimelineRepository.flush();
 
-        jdbcTemplate.update("""
-                INSERT INTO incident_timeline (incident_id, event_type, message, created_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                inc6Id, "CREATED", "Incident opened due to repeated reboot loop", now.minusHours(10)
-        );
-        logDatasetSeedEvent(
-                "incident",
-                "incident_timeline",
-                "insert",
-                Map.of("incidentId", inc6Id, "timelineEventType", "CREATED")
-        );
+        logTimelineSeedEvent(timeline1);
+        logTimelineSeedEvent(timeline2);
+        logTimelineSeedEvent(timeline3);
+        logTimelineSeedEvent(timeline4);
+        logTimelineSeedEvent(timeline5);
     }
 
     private void logSeedSkip(String tableName, long existingRowCount) {
@@ -641,6 +482,90 @@ public class DataInitializer {
         );
     }
 
+    private IncidentNode createIncidentNode(NetworkNode node, IncidentNodeRole role) {
+        IncidentNode incidentNode = new IncidentNode();
+        incidentNode.setNetworkNode(node);
+        incidentNode.setRole(role);
+        return incidentNode;
+    }
+
+    private MaintenanceNode createMaintenanceNode(NetworkNode node, LocalDateTime createdAt) {
+        MaintenanceNode maintenanceNode = new MaintenanceNode();
+        maintenanceNode.setNetworkNode(node);
+        maintenanceNode.setCreatedAt(createdAt);
+        return maintenanceNode;
+    }
+
+    private AlarmEvent createAlarmEvent(
+            String sourceSystem,
+            String externalId,
+            NetworkNode networkNode,
+            Incident incident,
+            String alarmType,
+            AlarmSeverity severity,
+            AlarmStatus status,
+            String description,
+            boolean suppressedByMaintenance,
+            LocalDateTime occurredAt,
+            LocalDateTime receivedAt,
+            LocalDateTime createdAt
+    ) {
+        AlarmEvent alarmEvent = new AlarmEvent();
+        alarmEvent.setSourceSystem(sourceSystem);
+        alarmEvent.setExternalId(externalId);
+        alarmEvent.setNetworkNode(networkNode);
+        alarmEvent.setIncident(incident);
+        alarmEvent.setAlarmType(alarmType);
+        alarmEvent.setSeverity(severity);
+        alarmEvent.setStatus(status);
+        alarmEvent.setDescription(description);
+        alarmEvent.setSuppressedByMaintenance(suppressedByMaintenance);
+        alarmEvent.setOccurredAt(occurredAt);
+        alarmEvent.setReceivedAt(receivedAt);
+        alarmEvent.setCreatedAt(createdAt);
+        return alarmEvent;
+    }
+
+    private IncidentTimeline createTimelineEntry(
+            Incident incident,
+            IncidentTimelineEventType eventType,
+            String message,
+            LocalDateTime createdAt
+    ) {
+        IncidentTimeline timeline = new IncidentTimeline();
+        timeline.setIncident(incident);
+        timeline.setEventType(eventType);
+        timeline.setMessage(message);
+        timeline.setCreatedAt(createdAt);
+        return timeline;
+    }
+
+    private void logAlarmSeedEvent(AlarmEvent alarmEvent) {
+        logDatasetSeedEvent(
+                "alarm",
+                "alarm_event",
+                "insert",
+                nullableMap(
+                        "externalId", alarmEvent.getExternalId(),
+                        "alarmType", alarmEvent.getAlarmType(),
+                        "incidentId", alarmEvent.getIncident() != null ? alarmEvent.getIncident().getId() : null,
+                        "networkNodeId", alarmEvent.getNetworkNode().getId()
+                )
+        );
+    }
+
+    private void logTimelineSeedEvent(IncidentTimeline timeline) {
+        logDatasetSeedEvent(
+                "incident",
+                "incident_timeline",
+                "insert",
+                Map.of(
+                        "incidentId", timeline.getIncident().getId(),
+                        "timelineEventType", timeline.getEventType()
+                )
+        );
+    }
+
     private Map<String, Object> nullableMap(Object... keyValues) {
         Map<String, Object> fields = new LinkedHashMap<>();
 
@@ -656,26 +581,8 @@ public class DataInitializer {
                 .orElseThrow(() -> new IllegalStateException("Network node not found: " + nodeName));
     }
 
-    private Long getNodeIdByName(String nodeName) {
-        return jdbcTemplate.queryForObject(
-                "SELECT id FROM network_node WHERE node_name = ?",
-                Long.class,
-                nodeName
-        );
-    }
-
-    private Long getIncidentIdByNumber(String incidentNumber) {
-        return jdbcTemplate.queryForObject(
-                "SELECT id FROM incident WHERE incident_number = ?",
-                Long.class,
-                incidentNumber
-        );
-    }
-
-    private IncidentNode createNode(NetworkNode node, IncidentNodeRole role) {
-        IncidentNode incidentNode = new IncidentNode();
-        incidentNode.setNetworkNode(node);
-        incidentNode.setRole(role);
-        return incidentNode;
+    private Incident getIncidentByNumber(String incidentNumber) {
+        return incidentRepository.findByIncidentNumber(incidentNumber)
+                .orElseThrow(() -> new IllegalStateException("Incident not found: " + incidentNumber));
     }
 }

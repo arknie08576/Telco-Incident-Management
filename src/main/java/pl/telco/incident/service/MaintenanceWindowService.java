@@ -2,24 +2,24 @@ package pl.telco.incident.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.ResultSetExtractor;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.MaintenanceWindowCreateRequest;
 import pl.telco.incident.dto.MaintenanceWindowResponse;
 import pl.telco.incident.dto.MaintenanceWindowUpdateRequest;
+import pl.telco.incident.entity.MaintenanceNode;
+import pl.telco.incident.entity.MaintenanceWindow;
+import pl.telco.incident.entity.NetworkNode;
 import pl.telco.incident.entity.enums.MaintenanceStatus;
 import pl.telco.incident.exception.BadRequestException;
 import pl.telco.incident.exception.ResourceNotFoundException;
-import pl.telco.incident.observability.ObservabilityEventLogger;
+import pl.telco.incident.repository.MaintenanceWindowRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
 
-import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -28,104 +28,67 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import static pl.telco.incident.repository.specification.MaintenanceWindowSpecifications.endTimeFrom;
+import static pl.telco.incident.repository.specification.MaintenanceWindowSpecifications.endTimeTo;
+import static pl.telco.incident.repository.specification.MaintenanceWindowSpecifications.hasNodeId;
+import static pl.telco.incident.repository.specification.MaintenanceWindowSpecifications.hasStatuses;
+import static pl.telco.incident.repository.specification.MaintenanceWindowSpecifications.startTimeFrom;
+import static pl.telco.incident.repository.specification.MaintenanceWindowSpecifications.startTimeTo;
+import static pl.telco.incident.repository.specification.MaintenanceWindowSpecifications.titleContains;
 
 @Service
 @RequiredArgsConstructor
 public class MaintenanceWindowService {
 
     private static final Map<String, String> ALLOWED_SORT_FIELDS = Map.of(
-            "id", "mw.id",
-            "title", "mw.title",
-            "status", "mw.status",
-            "startTime", "mw.start_time",
-            "endTime", "mw.end_time"
+            "id", "id",
+            "title", "title",
+            "status", "status",
+            "startTime", "startTime",
+            "endTime", "endTime"
     );
 
-    private final JdbcTemplate jdbcTemplate;
+    private final MaintenanceWindowRepository maintenanceWindowRepository;
     private final NetworkNodeRepository networkNodeRepository;
-    private final ObservabilityEventLogger observabilityEventLogger;
 
     @Transactional
     public MaintenanceWindowResponse createMaintenanceWindow(MaintenanceWindowCreateRequest request) {
-        validateRequest(request);
+        List<Long> uniqueNodeIds = deduplicateNodeIds(request.getNodeIds());
+        validateTimeRange(request.getStartTime(), request.getEndTime());
+        Map<Long, NetworkNode> nodesById = loadNodesById(uniqueNodeIds);
 
-        LocalDateTime now = LocalDateTime.now();
-        Long maintenanceWindowId = jdbcTemplate.queryForObject(
-                """
-                INSERT INTO maintenance_window (title, description, status, start_time, end_time, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                RETURNING id
-                """,
-                Long.class,
-                request.getTitle().trim(),
-                request.getDescription(),
-                request.getStatus().name(),
-                Timestamp.valueOf(request.getStartTime()),
-                Timestamp.valueOf(request.getEndTime()),
-                Timestamp.valueOf(now)
-        );
+        MaintenanceWindow maintenanceWindow = new MaintenanceWindow();
+        maintenanceWindow.setTitle(request.getTitle().trim());
+        maintenanceWindow.setDescription(request.getDescription());
+        maintenanceWindow.setStatus(request.getStatus());
+        maintenanceWindow.setStartTime(request.getStartTime());
+        maintenanceWindow.setEndTime(request.getEndTime());
 
-        logPersistenceEvent(
-                "MaintenanceWindow",
-                "maintenance_window",
-                maintenanceWindowId,
-                "insert",
-                Map.of(
-                        "title", request.getTitle().trim(),
-                        "maintenanceStatus", request.getStatus(),
-                        "startTime", request.getStartTime(),
-                        "endTime", request.getEndTime()
-                )
-        );
-
-        List<Long> nodeIds = new ArrayList<>();
-        for (Long nodeId : deduplicateNodeIds(request.getNodeIds())) {
-            Long maintenanceNodeId = jdbcTemplate.queryForObject(
-                    """
-                    INSERT INTO maintenance_node (maintenance_window_id, network_node_id, created_at)
-                    VALUES (?, ?, ?)
-                    RETURNING id
-                    """,
-                    Long.class,
-                    maintenanceWindowId,
-                    nodeId,
-                    Timestamp.valueOf(now)
-            );
-
-            logPersistenceEvent(
-                    "MaintenanceNode",
-                    "maintenance_node",
-                    maintenanceNodeId,
-                    "insert",
-                    Map.of(
-                            "maintenanceWindowId", maintenanceWindowId,
-                            "networkNodeId", nodeId
-                    )
-            );
-            nodeIds.add(nodeId);
+        for (Long nodeId : uniqueNodeIds) {
+            MaintenanceNode maintenanceNode = new MaintenanceNode();
+            maintenanceNode.setNetworkNode(nodesById.get(nodeId));
+            maintenanceWindow.addMaintenanceNode(maintenanceNode);
         }
 
-        MaintenanceWindowResponse response = new MaintenanceWindowResponse();
-        response.setId(maintenanceWindowId);
-        response.setTitle(request.getTitle().trim());
-        response.setDescription(request.getDescription());
-        response.setStatus(request.getStatus());
-        response.setStartTime(request.getStartTime());
-        response.setEndTime(request.getEndTime());
-        response.setNodeIds(nodeIds);
-        return response;
+        return mapToResponse(maintenanceWindowRepository.save(maintenanceWindow));
     }
 
     @Transactional
     public MaintenanceWindowResponse updateMaintenanceWindow(Long id, MaintenanceWindowUpdateRequest request) {
-        MaintenanceWindowResponse current = getMaintenanceWindowOrThrow(id);
+        MaintenanceWindow maintenanceWindow = getMaintenanceWindowEntityOrThrow(id);
 
-        String title = current.getTitle();
-        String description = current.getDescription();
-        MaintenanceStatus status = current.getStatus();
-        LocalDateTime startTime = current.getStartTime();
-        LocalDateTime endTime = current.getEndTime();
-        List<Long> nodeIds = new ArrayList<>(current.getNodeIds());
+        String title = maintenanceWindow.getTitle();
+        String description = maintenanceWindow.getDescription();
+        MaintenanceStatus status = maintenanceWindow.getStatus();
+        LocalDateTime startTime = maintenanceWindow.getStartTime();
+        LocalDateTime endTime = maintenanceWindow.getEndTime();
+        List<Long> currentNodeIds = maintenanceWindow.getMaintenanceNodes().stream()
+                .map(node -> node.getNetworkNode().getId())
+                .toList();
+        List<Long> requestedNodeIds = currentNodeIds;
         List<String> changedFields = new ArrayList<>();
 
         if (request.getTitle() != null) {
@@ -157,11 +120,10 @@ public class MaintenanceWindowService {
         }
 
         if (request.getNodeIds() != null) {
-            List<Long> deduplicatedNodeIds = deduplicateNodeIds(request.getNodeIds());
-            validateNodeIdsExist(deduplicatedNodeIds);
+            requestedNodeIds = deduplicateNodeIds(request.getNodeIds());
+            loadNodesById(requestedNodeIds);
 
-            if (!new LinkedHashSet<>(nodeIds).equals(new LinkedHashSet<>(deduplicatedNodeIds))) {
-                nodeIds = deduplicatedNodeIds;
+            if (!new LinkedHashSet<>(currentNodeIds).equals(new LinkedHashSet<>(requestedNodeIds))) {
                 changedFields.add("nodeIds");
             }
         }
@@ -172,46 +134,22 @@ public class MaintenanceWindowService {
             throw new BadRequestException("Patch request does not change maintenance window");
         }
 
-        if (changedFields.stream().anyMatch(field -> !"nodeIds".equals(field))) {
-            jdbcTemplate.update(
-                    """
-                    UPDATE maintenance_window
-                    SET title = ?, description = ?, status = ?, start_time = ?, end_time = ?
-                    WHERE id = ?
-                    """,
-                    title,
-                    description,
-                    status.name(),
-                    Timestamp.valueOf(startTime),
-                    Timestamp.valueOf(endTime),
-                    id
-            );
-
-            logPersistenceEvent(
-                    "MaintenanceWindow",
-                    "maintenance_window",
-                    id,
-                    "update",
-                    Map.of(
-                            "title", title,
-                            "maintenanceStatus", status,
-                            "startTime", startTime,
-                            "endTime", endTime,
-                            "changedFields", changedFields
-                    )
-            );
-        }
+        maintenanceWindow.setTitle(title);
+        maintenanceWindow.setDescription(description);
+        maintenanceWindow.setStatus(status);
+        maintenanceWindow.setStartTime(startTime);
+        maintenanceWindow.setEndTime(endTime);
 
         if (changedFields.contains("nodeIds")) {
-            syncMaintenanceNodes(id, current.getNodeIds(), nodeIds);
+            syncMaintenanceNodes(maintenanceWindow, requestedNodeIds);
         }
 
-        return getMaintenanceWindowOrThrow(id);
+        return mapToResponse(maintenanceWindowRepository.save(maintenanceWindow));
     }
 
     @Transactional(readOnly = true)
     public MaintenanceWindowResponse getMaintenanceWindowById(Long id) {
-        return getMaintenanceWindowOrThrow(id);
+        return mapToResponse(getMaintenanceWindowEntityOrThrow(id));
     }
 
     @Transactional(readOnly = true)
@@ -235,192 +173,59 @@ public class MaintenanceWindowService {
 
         Set<MaintenanceStatus> statusFilters = mergeStatusFilters(status, statuses);
         Sort.Direction sortDirection = parseSortDirection(direction);
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = PageRequest.of(page, size, buildSort(sortBy, sortDirection));
 
-        QueryFragments queryFragments = buildWhereClause(statusFilters, title, nodeId, startFrom, startTo, endFrom, endTo);
+        Specification<MaintenanceWindow> specification = Specification
+                .where(hasStatuses(statusFilters))
+                .and(titleContains(title))
+                .and(hasNodeId(nodeId))
+                .and(startTimeFrom(startFrom))
+                .and(startTimeTo(startTo))
+                .and(endTimeFrom(endFrom))
+                .and(endTimeTo(endTo));
 
-        String listSql = """
-                SELECT mw.id, mw.title, mw.description, mw.status, mw.start_time, mw.end_time
-                FROM maintenance_window mw
-                """ + queryFragments.whereClause()
-                + " ORDER BY " + ALLOWED_SORT_FIELDS.get(sortBy) + " " + sortDirection.name() + ", mw.id DESC"
-                + " LIMIT ? OFFSET ?";
-
-        List<Object> listParams = new ArrayList<>(queryFragments.params());
-        listParams.add(size);
-        listParams.add((long) page * size);
-
-        List<MaintenanceWindowResponse> content = jdbcTemplate.query(
-                listSql,
-                (rs, rowNum) -> mapMaintenanceWindowRow(
-                        rs.getLong("id"),
-                        rs.getString("title"),
-                        rs.getString("description"),
-                        rs.getString("status"),
-                        rs.getTimestamp("start_time").toLocalDateTime(),
-                        rs.getTimestamp("end_time").toLocalDateTime()
-                ),
-                listParams.toArray()
-        );
-
-        Map<Long, List<Long>> nodeIdsByWindowId = loadNodeIdsByWindowIds(content.stream()
-                .map(MaintenanceWindowResponse::getId)
-                .toList());
-        for (MaintenanceWindowResponse response : content) {
-            response.setNodeIds(nodeIdsByWindowId.getOrDefault(response.getId(), List.of()));
-        }
-
-        Long totalElements = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM maintenance_window mw " + queryFragments.whereClause(),
-                Long.class,
-                queryFragments.params().toArray()
-        );
-
-        return new PageImpl<>(content, pageable, totalElements == null ? 0 : totalElements);
+        return maintenanceWindowRepository.findAll(specification, pageable)
+                .map(this::mapToResponse);
     }
 
     @Transactional(readOnly = true)
-    public MaintenanceWindowResponse getMaintenanceWindowOrThrow(Long id) {
-        MaintenanceWindowResponse response = jdbcTemplate.query(
-                """
-                SELECT id, title, description, status, start_time, end_time
-                FROM maintenance_window
-                WHERE id = ?
-                """,
-                (ResultSetExtractor<MaintenanceWindowResponse>) rs -> {
-                    if (!rs.next()) {
-                        return null;
-                    }
-
-                    return mapMaintenanceWindowRow(
-                            rs.getLong("id"),
-                            rs.getString("title"),
-                            rs.getString("description"),
-                            rs.getString("status"),
-                            rs.getTimestamp("start_time").toLocalDateTime(),
-                            rs.getTimestamp("end_time").toLocalDateTime()
-                    );
-                },
-                id
-        );
-
-        if (response == null) {
-            throw new ResourceNotFoundException("Maintenance window not found: " + id);
-        }
-
-        response.setNodeIds(loadNodeIdsByWindowId(id));
-        return response;
+    public MaintenanceWindow getMaintenanceWindowEntityOrThrow(Long id) {
+        return maintenanceWindowRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Maintenance window not found: " + id));
     }
 
-    private QueryFragments buildWhereClause(
-            Set<MaintenanceStatus> statusFilters,
-            String title,
-            Long nodeId,
-            LocalDateTime startFrom,
-            LocalDateTime startTo,
-            LocalDateTime endFrom,
-            LocalDateTime endTo
-    ) {
-        StringBuilder whereClause = new StringBuilder("WHERE 1 = 1");
-        List<Object> params = new ArrayList<>();
-
-        if (!statusFilters.isEmpty()) {
-            whereClause.append(" AND mw.status IN (")
-                    .append(buildPlaceholders(statusFilters.size()))
-                    .append(")");
-            statusFilters.forEach(value -> params.add(value.name()));
-        }
-
-        if (title != null && !title.isBlank()) {
-            whereClause.append(" AND LOWER(mw.title) LIKE ?");
-            params.add("%" + title.trim().toLowerCase(Locale.ROOT) + "%");
-        }
-
-        if (nodeId != null) {
-            whereClause.append("""
-                     AND EXISTS (
-                         SELECT 1
-                         FROM maintenance_node mn
-                         WHERE mn.maintenance_window_id = mw.id
-                           AND mn.network_node_id = ?
-                     )
-                    """);
-            params.add(nodeId);
-        }
-
-        if (startFrom != null) {
-            whereClause.append(" AND mw.start_time >= ?");
-            params.add(Timestamp.valueOf(startFrom));
-        }
-
-        if (startTo != null) {
-            whereClause.append(" AND mw.start_time <= ?");
-            params.add(Timestamp.valueOf(startTo));
-        }
-
-        if (endFrom != null) {
-            whereClause.append(" AND mw.end_time >= ?");
-            params.add(Timestamp.valueOf(endFrom));
-        }
-
-        if (endTo != null) {
-            whereClause.append(" AND mw.end_time <= ?");
-            params.add(Timestamp.valueOf(endTo));
-        }
-
-        return new QueryFragments(whereClause.toString(), params);
-    }
-
-    private Map<Long, List<Long>> loadNodeIdsByWindowIds(List<Long> maintenanceWindowIds) {
-        if (maintenanceWindowIds.isEmpty()) {
-            return Map.of();
-        }
-
-        Map<Long, List<Long>> nodeIdsByWindowId = new LinkedHashMap<>();
-        jdbcTemplate.query(
-                """
-                SELECT maintenance_window_id, network_node_id
-                FROM maintenance_node
-                WHERE maintenance_window_id IN (%s)
-                ORDER BY maintenance_window_id, id
-                """.formatted(buildPlaceholders(maintenanceWindowIds.size())),
-                (ResultSetExtractor<Void>) rs -> {
-                    while (rs.next()) {
-                        nodeIdsByWindowId
-                                .computeIfAbsent(rs.getLong("maintenance_window_id"), ignored -> new ArrayList<>())
-                                .add(rs.getLong("network_node_id"));
-                    }
-                    return null;
-                },
-                maintenanceWindowIds.toArray()
-        );
-
-        return nodeIdsByWindowId;
-    }
-
-    private MaintenanceWindowResponse mapMaintenanceWindowRow(
-            Long id,
-            String title,
-            String description,
-            String status,
-            LocalDateTime startTime,
-            LocalDateTime endTime
-    ) {
+    private MaintenanceWindowResponse mapToResponse(MaintenanceWindow maintenanceWindow) {
         MaintenanceWindowResponse response = new MaintenanceWindowResponse();
-        response.setId(id);
-        response.setTitle(title);
-        response.setDescription(description);
-        response.setStatus(MaintenanceStatus.valueOf(status));
-        response.setStartTime(startTime);
-        response.setEndTime(endTime);
-        response.setNodeIds(new ArrayList<>());
+        response.setId(maintenanceWindow.getId());
+        response.setTitle(maintenanceWindow.getTitle());
+        response.setDescription(maintenanceWindow.getDescription());
+        response.setStatus(maintenanceWindow.getStatus());
+        response.setStartTime(maintenanceWindow.getStartTime());
+        response.setEndTime(maintenanceWindow.getEndTime());
+        response.setNodeIds(maintenanceWindow.getMaintenanceNodes().stream()
+                .map(node -> node.getNetworkNode().getId())
+                .toList());
         return response;
     }
 
-    private void validateRequest(MaintenanceWindowCreateRequest request) {
-        List<Long> uniqueNodeIds = deduplicateNodeIds(request.getNodeIds());
-        validateTimeRange(request.getStartTime(), request.getEndTime());
-        validateNodeIdsExist(uniqueNodeIds);
+    private void syncMaintenanceNodes(MaintenanceWindow maintenanceWindow, List<Long> requestedNodeIds) {
+        Map<Long, MaintenanceNode> currentNodesById = maintenanceWindow.getMaintenanceNodes().stream()
+                .collect(Collectors.toMap(node -> node.getNetworkNode().getId(), Function.identity(), (left, right) -> left, LinkedHashMap::new));
+        Map<Long, NetworkNode> requestedNodesById = loadNodesById(requestedNodeIds);
+        LinkedHashSet<Long> requestedNodeIdSet = new LinkedHashSet<>(requestedNodeIds);
+
+        List<MaintenanceNode> nodesToRemove = maintenanceWindow.getMaintenanceNodes().stream()
+                .filter(node -> !requestedNodeIdSet.contains(node.getNetworkNode().getId()))
+                .toList();
+        nodesToRemove.forEach(maintenanceWindow::removeMaintenanceNode);
+
+        for (Long requestedNodeId : requestedNodeIds) {
+            if (!currentNodesById.containsKey(requestedNodeId)) {
+                MaintenanceNode maintenanceNode = new MaintenanceNode();
+                maintenanceNode.setNetworkNode(requestedNodesById.get(requestedNodeId));
+                maintenanceWindow.addMaintenanceNode(maintenanceNode);
+            }
+        }
     }
 
     private List<Long> deduplicateNodeIds(List<Long> nodeIds) {
@@ -439,14 +244,15 @@ public class MaintenanceWindowService {
         }
     }
 
-    private void validateNodeIdsExist(List<Long> nodeIds) {
-        List<Long> existingNodeIds = networkNodeRepository.findAllById(nodeIds).stream()
-                .map(node -> node.getId())
-                .toList();
+    private Map<Long, NetworkNode> loadNodesById(List<Long> nodeIds) {
+        Map<Long, NetworkNode> nodesById = networkNodeRepository.findAllById(nodeIds).stream()
+                .collect(Collectors.toMap(NetworkNode::getId, Function.identity()));
 
-        if (existingNodeIds.size() != nodeIds.size()) {
+        if (nodesById.size() != nodeIds.size()) {
             throw new ResourceNotFoundException("One or more network nodes were not found");
         }
+
+        return nodesById;
     }
 
     private void validateSortBy(String sortBy) {
@@ -503,92 +309,11 @@ public class MaintenanceWindowService {
         return parsedValues;
     }
 
-    private String buildPlaceholders(int count) {
-        return String.join(", ", java.util.Collections.nCopies(count, "?"));
-    }
-
-    private List<Long> loadNodeIdsByWindowId(Long maintenanceWindowId) {
-        return jdbcTemplate.query(
-                """
-                SELECT network_node_id
-                FROM maintenance_node
-                WHERE maintenance_window_id = ?
-                ORDER BY id
-                """,
-                (rs, rowNum) -> rs.getLong("network_node_id"),
-                maintenanceWindowId
-        );
-    }
-
-    private void syncMaintenanceNodes(Long maintenanceWindowId, List<Long> currentNodeIds, List<Long> requestedNodeIds) {
-        LinkedHashSet<Long> current = new LinkedHashSet<>(currentNodeIds);
-        LinkedHashSet<Long> requested = new LinkedHashSet<>(requestedNodeIds);
-
-        for (Long nodeId : current) {
-            if (!requested.contains(nodeId)) {
-                jdbcTemplate.update(
-                        "DELETE FROM maintenance_node WHERE maintenance_window_id = ? AND network_node_id = ?",
-                        maintenanceWindowId,
-                        nodeId
-                );
-                logPersistenceEvent(
-                        "MaintenanceNode",
-                        "maintenance_node",
-                        null,
-                        "delete",
-                        Map.of(
-                                "maintenanceWindowId", maintenanceWindowId,
-                                "networkNodeId", nodeId
-                        )
-                );
-            }
+    private Sort buildSort(String sortBy, Sort.Direction direction) {
+        Sort sort = Sort.by(direction, ALLOWED_SORT_FIELDS.get(sortBy));
+        if (!"id".equals(sortBy)) {
+            sort = sort.and(Sort.by(Sort.Direction.DESC, "id"));
         }
-
-        LocalDateTime now = LocalDateTime.now();
-        for (Long nodeId : requested) {
-            if (!current.contains(nodeId)) {
-                Long maintenanceNodeId = jdbcTemplate.queryForObject(
-                        """
-                        INSERT INTO maintenance_node (maintenance_window_id, network_node_id, created_at)
-                        VALUES (?, ?, ?)
-                        RETURNING id
-                        """,
-                        Long.class,
-                        maintenanceWindowId,
-                        nodeId,
-                        Timestamp.valueOf(now)
-                );
-
-                logPersistenceEvent(
-                        "MaintenanceNode",
-                        "maintenance_node",
-                        maintenanceNodeId,
-                        "insert",
-                        Map.of(
-                                "maintenanceWindowId", maintenanceWindowId,
-                                "networkNodeId", nodeId
-                        )
-                );
-            }
-        }
-    }
-
-    private void logPersistenceEvent(String entityType, String tableName, Long entityId, String action, Map<String, Object> additionalFields) {
-        Map<String, Object> fields = new LinkedHashMap<>();
-        fields.put("entityType", entityType);
-        fields.put("tableName", tableName);
-        fields.put("entityId", entityId);
-        fields.putAll(additionalFields);
-
-        observabilityEventLogger.logEvent(
-                "maintenance",
-                "persistence",
-                action,
-                "entity_change",
-                fields
-        );
-    }
-
-    private record QueryFragments(String whereClause, List<Object> params) {
+        return sort;
     }
 }
