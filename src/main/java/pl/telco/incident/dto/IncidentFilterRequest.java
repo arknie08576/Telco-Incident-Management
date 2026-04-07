@@ -9,11 +9,16 @@ import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.entity.enums.Region;
 import pl.telco.incident.entity.enums.SourceAlarmType;
+import pl.telco.incident.validation.DateRangeValid;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
+@DateRangeValid(from = "openedFrom", to = "openedTo", message = "openedFrom must be earlier than or equal to openedTo")
+@DateRangeValid(from = "acknowledgedFrom", to = "acknowledgedTo", message = "acknowledgedFrom must be earlier than or equal to acknowledgedTo")
+@DateRangeValid(from = "resolvedFrom", to = "resolvedTo", message = "resolvedFrom must be earlier than or equal to resolvedTo")
+@DateRangeValid(from = "closedFrom", to = "closedTo", message = "closedFrom must be earlier than or equal to closedTo")
 public class IncidentFilterRequest {
 
     @Parameter(description = "Zero-based page index", example = "0")

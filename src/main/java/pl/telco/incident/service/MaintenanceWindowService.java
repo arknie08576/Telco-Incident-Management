@@ -60,7 +60,6 @@ public class MaintenanceWindowService {
     @Transactional
     public MaintenanceWindowResponse createMaintenanceWindow(MaintenanceWindowCreateRequest request) {
         List<Long> uniqueNodeIds = deduplicateNodeIds(request.getNodeIds());
-        validateTimeRange(request.getStartTime(), request.getEndTime());
         Map<Long, NetworkNode> nodesById = loadNodesById(uniqueNodeIds);
 
         MaintenanceWindow maintenanceWindow = new MaintenanceWindow();
@@ -158,8 +157,6 @@ public class MaintenanceWindowService {
     @Transactional(readOnly = true)
     public Page<MaintenanceWindowResponse> getMaintenanceWindows(MaintenanceWindowFilterRequest filter) {
         validateSortBy(filter.getSortBy());
-        validateDateRange("startFrom", filter.getStartFrom(), "startTo", filter.getStartTo());
-        validateDateRange("endFrom", filter.getEndFrom(), "endTo", filter.getEndTo());
 
         Set<MaintenanceStatus> statusFilters = mergeStatusFilters(filter.getStatus(), filter.getStatuses());
         Sort.Direction sortDirection = parseSortDirection(filter.getDirection());
@@ -211,12 +208,6 @@ public class MaintenanceWindowService {
     private void validateTimeRange(LocalDateTime startTime, LocalDateTime endTime) {
         if (!endTime.isAfter(startTime)) {
             throw new BadRequestException("endTime must be later than startTime");
-        }
-    }
-
-    private void validateDateRange(String fromFieldName, LocalDateTime from, String toFieldName, LocalDateTime to) {
-        if (from != null && to != null && from.isAfter(to)) {
-            throw new BadRequestException(fromFieldName + " must be earlier than or equal to " + toFieldName);
         }
     }
 

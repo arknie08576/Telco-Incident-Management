@@ -140,10 +140,6 @@ public class IncidentService {
     @Transactional(readOnly = true)
     public Page<IncidentSummaryResponse> getAllIncidents(IncidentFilterRequest filter) {
         validateSortBy(filter.getSortBy());
-        validateDateRange("openedFrom", filter.getOpenedFrom(), "openedTo", filter.getOpenedTo());
-        validateDateRange("acknowledgedFrom", filter.getAcknowledgedFrom(), "acknowledgedTo", filter.getAcknowledgedTo());
-        validateDateRange("resolvedFrom", filter.getResolvedFrom(), "resolvedTo", filter.getResolvedTo());
-        validateDateRange("closedFrom", filter.getClosedFrom(), "closedTo", filter.getClosedTo());
 
         Set<IncidentPriority> priorityFilters = mergePriorityFilters(filter.getPriority(), filter.getPriorities());
         Set<IncidentStatus> statusFilters = mergeStatusFilters(filter.getStatus(), filter.getStatuses());
@@ -596,12 +592,6 @@ public class IncidentService {
 
         return networkNodeRepository.findAllById(requestedNodeIds).stream()
                 .collect(Collectors.toMap(NetworkNode::getId, node -> node));
-    }
-
-    private void validateDateRange(String fromFieldName, LocalDateTime from, String toFieldName, LocalDateTime to) {
-        if (from != null && to != null && from.isAfter(to)) {
-            throw new BadRequestException(fromFieldName + " must be earlier than or equal to " + toFieldName);
-        }
     }
 
     private Set<IncidentPriority> mergePriorityFilters(IncidentPriority priority, List<String> priorities) {

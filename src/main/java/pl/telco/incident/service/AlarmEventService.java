@@ -152,8 +152,6 @@ public class AlarmEventService {
     @Transactional(readOnly = true)
     public Page<AlarmEventResponse> getAlarmEvents(AlarmEventFilterRequest filter) {
         validateSortBy(filter.getSortBy());
-        validateDateRange("occurredFrom", filter.getOccurredFrom(), "occurredTo", filter.getOccurredTo());
-        validateDateRange("receivedFrom", filter.getReceivedFrom(), "receivedTo", filter.getReceivedTo());
 
         Set<AlarmSeverity> severityFilters = mergeSeverityFilters(filter.getSeverity(), filter.getSeverities());
         Set<AlarmStatus> statusFilters = mergeStatusFilters(filter.getStatus(), filter.getStatuses());
@@ -216,12 +214,6 @@ public class AlarmEventService {
             return Sort.Direction.fromString(direction);
         } catch (IllegalArgumentException ex) {
             throw new BadRequestException("Unsupported direction value: " + direction);
-        }
-    }
-
-    private void validateDateRange(String fromFieldName, LocalDateTime from, String toFieldName, LocalDateTime to) {
-        if (from != null && to != null && from.isAfter(to)) {
-            throw new BadRequestException(fromFieldName + " must be earlier than or equal to " + toFieldName);
         }
     }
 

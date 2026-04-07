@@ -8,11 +8,13 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import pl.telco.incident.entity.enums.MaintenanceStatus;
+import pl.telco.incident.validation.DateRangeValid;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
+@DateRangeValid(from = "startTime", to = "endTime", strict = true, message = "endTime must be later than startTime")
 public class MaintenanceWindowCreateRequest {
 
     @NotBlank(message = "title is required")

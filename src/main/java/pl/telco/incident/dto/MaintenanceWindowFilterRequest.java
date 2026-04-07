@@ -6,11 +6,14 @@ import jakarta.validation.constraints.Min;
 import lombok.Data;
 import org.springframework.format.annotation.DateTimeFormat;
 import pl.telco.incident.entity.enums.MaintenanceStatus;
+import pl.telco.incident.validation.DateRangeValid;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
+@DateRangeValid(from = "startFrom", to = "startTo", message = "startFrom must be earlier than or equal to startTo")
+@DateRangeValid(from = "endFrom", to = "endTo", message = "endFrom must be earlier than or equal to endTo")
 public class MaintenanceWindowFilterRequest {
 
     @Parameter(description = "Zero-based page index", example = "0")

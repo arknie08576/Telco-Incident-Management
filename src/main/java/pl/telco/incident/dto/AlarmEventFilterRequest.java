@@ -7,11 +7,14 @@ import lombok.Data;
 import org.springframework.format.annotation.DateTimeFormat;
 import pl.telco.incident.entity.enums.AlarmSeverity;
 import pl.telco.incident.entity.enums.AlarmStatus;
+import pl.telco.incident.validation.DateRangeValid;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
+@DateRangeValid(from = "occurredFrom", to = "occurredTo", message = "occurredFrom must be earlier than or equal to occurredTo")
+@DateRangeValid(from = "receivedFrom", to = "receivedTo", message = "receivedFrom must be earlier than or equal to receivedTo")
 public class AlarmEventFilterRequest {
 
     @Parameter(description = "Zero-based page index", example = "0")
