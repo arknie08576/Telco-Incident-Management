@@ -53,7 +53,8 @@ Supported endpoints:
 - Spring Boot 3.3.5
 - Spring Web
 - Spring Data JPA / Hibernate
-- Bean Validation
+- Bean Validation (with custom constraints)
+- MapStruct
 - PostgreSQL
 - Flyway
 - Springdoc OpenAPI / Swagger UI
@@ -69,6 +70,8 @@ Main application code:
 - `src/main/java/pl/telco/incident/repository` - JPA repositories and specifications
 - `src/main/java/pl/telco/incident/entity` - domain entities
 - `src/main/java/pl/telco/incident/dto` - API requests and responses
+- `src/main/java/pl/telco/incident/mapper` - MapStruct mappers for entity-to-DTO conversion
+- `src/main/java/pl/telco/incident/validation` - custom Jakarta Bean Validation constraints
 - `src/main/java/pl/telco/incident/exception` - API errors and exception handler
 - `src/main/java/pl/telco/incident/observability` - shared event logger, audit listener, and application lifecycle logs
 - `src/main/java/pl/telco/incident/config` - Swagger and data seeding
@@ -853,7 +856,7 @@ Run all tests:
 ```
 
 Test scope:
-- incident service unit tests
+- service unit tests for incidents, alarm events, maintenance windows, and network nodes
 - controller and exception handling WebMvc tests
 - API integration tests on PostgreSQL via Testcontainers
 - network node, maintenance window, and alarm event integration tests
