@@ -229,8 +229,11 @@ Build and run the jar:
 
 ```powershell
 .\mvnw clean package
+$env:SPRING_DATASOURCE_PASSWORD="postgres"
 java -jar target/telco-incident-management-0.0.1-SNAPSHOT.jar
 ```
+
+The packaged jar uses the same datasource settings from `application.yaml`, so `SPRING_DATASOURCE_PASSWORD` must also be set when starting it outside Docker.
 
 ### Swagger / OpenAPI
 
@@ -870,4 +873,3 @@ Testcontainers:
 Test profile:
 - `src/test/resources/application-test.yaml`
 - `app.seed.enabled=false`
-

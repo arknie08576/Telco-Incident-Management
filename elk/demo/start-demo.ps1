@@ -79,7 +79,7 @@ Wait-HttpReady -Url "$BaseUrl/actuator/health/readiness" -TimeoutSeconds 300 -Sl
 if (-not $SkipImport) {
     Write-Host "Importing Kibana saved objects..." -ForegroundColor Cyan
     & $importScript
-    if ($LASTEXITCODE -ne 0) {
+    if (-not $?) {
         throw "Saved objects import failed"
     }
 }
@@ -92,7 +92,7 @@ if (-not $SkipData) {
         -RootNodeId $RootNodeId `
         -AffectedNodeIds $AffectedNodeIds `
         -DelayMs $DelayMs
-    if ($LASTEXITCODE -ne 0) {
+    if (-not $?) {
         throw "Demo data generation failed"
     }
 }
