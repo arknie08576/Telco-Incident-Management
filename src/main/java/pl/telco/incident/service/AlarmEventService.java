@@ -12,6 +12,7 @@ import pl.telco.incident.dto.AlarmEventCreateRequest;
 import pl.telco.incident.dto.AlarmEventFilterRequest;
 import pl.telco.incident.dto.AlarmEventResponse;
 import pl.telco.incident.dto.AlarmEventUpdateRequest;
+import pl.telco.incident.mapper.AlarmEventMapper;
 import pl.telco.incident.entity.AlarmEvent;
 import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.NetworkNode;
@@ -63,6 +64,7 @@ public class AlarmEventService {
     private final AlarmEventRepository alarmEventRepository;
     private final NetworkNodeRepository networkNodeRepository;
     private final IncidentRepository incidentRepository;
+    private final AlarmEventMapper alarmEventMapper;
 
     @Transactional
     public AlarmEventResponse createAlarmEvent(AlarmEventCreateRequest request) {
@@ -80,7 +82,7 @@ public class AlarmEventService {
         alarmEvent.setSuppressedByMaintenance(Boolean.TRUE.equals(request.getSuppressedByMaintenance()));
         alarmEvent.setOccurredAt(request.getOccurredAt());
 
-        return mapToResponse(alarmEventRepository.save(alarmEvent));
+        return alarmEventMapper.toResponse(alarmEventRepository.save(alarmEvent));
     }
 
     @Transactional
@@ -139,12 +141,12 @@ public class AlarmEventService {
             throw new BadRequestException("Patch request does not change alarm event");
         }
 
-        return mapToResponse(alarmEventRepository.save(alarmEvent));
+        return alarmEventMapper.toResponse(alarmEventRepository.save(alarmEvent));
     }
 
     @Transactional(readOnly = true)
     public AlarmEventResponse getAlarmEventById(Long id) {
-        return mapToResponse(getAlarmEventEntityOrThrow(id));
+        return alarmEventMapper.toResponse(getAlarmEventEntityOrThrow(id));
     }
 
     @Transactional(readOnly = true)
@@ -173,29 +175,12 @@ public class AlarmEventService {
                 .and(receivedAtTo(filter.getReceivedTo()));
 
         return alarmEventRepository.findAll(specification, pageable)
-                .map(this::mapToResponse);
+                .map(alarmEventMapper::toResponse);
     }
 
     private AlarmEvent getAlarmEventEntityOrThrow(Long id) {
         return alarmEventRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Alarm event not found: " + id));
-    }
-
-    private AlarmEventResponse mapToResponse(AlarmEvent alarmEvent) {
-        AlarmEventResponse response = new AlarmEventResponse();
-        response.setId(alarmEvent.getId());
-        response.setSourceSystem(alarmEvent.getSourceSystem());
-        response.setExternalId(alarmEvent.getExternalId());
-        response.setNetworkNodeId(alarmEvent.getNetworkNode().getId());
-        response.setIncidentId(alarmEvent.getIncident() != null ? alarmEvent.getIncident().getId() : null);
-        response.setAlarmType(alarmEvent.getAlarmType());
-        response.setSeverity(alarmEvent.getSeverity());
-        response.setStatus(alarmEvent.getStatus());
-        response.setDescription(alarmEvent.getDescription());
-        response.setSuppressedByMaintenance(alarmEvent.getSuppressedByMaintenance());
-        response.setOccurredAt(alarmEvent.getOccurredAt());
-        response.setReceivedAt(alarmEvent.getReceivedAt());
-        return response;
     }
 
     private void validateCreateRequest(AlarmEventCreateRequest request) {

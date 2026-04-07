@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.NetworkNodeCreateRequest;
 import pl.telco.incident.dto.NetworkNodeResponse;
 import pl.telco.incident.dto.NetworkNodeUpdateRequest;
+import pl.telco.incident.mapper.NetworkNodeMapper;
 import pl.telco.incident.entity.NetworkNode;
 import pl.telco.incident.entity.enums.NodeType;
 import pl.telco.incident.entity.enums.Region;
@@ -33,6 +34,7 @@ public class NetworkNodeService {
 
     private final NetworkNodeRepository networkNodeRepository;
     private final ObservabilityEventLogger observabilityEventLogger;
+    private final NetworkNodeMapper networkNodeMapper;
 
     @Transactional
     public NetworkNodeResponse createNetworkNode(NetworkNodeCreateRequest request) {
@@ -50,7 +52,7 @@ public class NetworkNodeService {
                 .active(request.getActive())
                 .build();
 
-        return mapToResponse(networkNodeRepository.save(node));
+        return networkNodeMapper.toResponse(networkNodeRepository.save(node));
     }
 
     @Transactional
@@ -101,7 +103,7 @@ public class NetworkNodeService {
             throw new BadRequestException("Patch request does not change network node");
         }
 
-        return mapToResponse(networkNodeRepository.save(node));
+        return networkNodeMapper.toResponse(networkNodeRepository.save(node));
     }
 
     @Transactional(readOnly = true)
@@ -113,7 +115,7 @@ public class NetworkNodeService {
                 .and(isActive(active));
 
         List<NetworkNodeResponse> responses = networkNodeRepository.findAll(specification, Sort.by(Sort.Direction.ASC, "nodeName")).stream()
-                .map(this::mapToResponse)
+                .map(networkNodeMapper::toResponse)
                 .toList();
 
         Map<String, Object> fields = new LinkedHashMap<>();
@@ -136,19 +138,8 @@ public class NetworkNodeService {
 
     @Transactional(readOnly = true)
     public NetworkNodeResponse getNetworkNodeById(Long id) {
-        return mapToResponse(networkNodeRepository.findById(id)
+        return networkNodeMapper.toResponse(networkNodeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Network node not found: " + id)));
-    }
-
-    private NetworkNodeResponse mapToResponse(NetworkNode node) {
-        NetworkNodeResponse response = new NetworkNodeResponse();
-        response.setId(node.getId());
-        response.setNodeName(node.getNodeName());
-        response.setNodeType(node.getNodeType());
-        response.setRegion(node.getRegion());
-        response.setVendor(node.getVendor());
-        response.setActive(node.getActive());
-        return response;
     }
 
     private String normalize(String value) {

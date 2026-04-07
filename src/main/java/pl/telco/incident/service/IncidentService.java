@@ -16,11 +16,11 @@ import pl.telco.incident.dto.IncidentActionRequest;
 import pl.telco.incident.dto.IncidentCreateRequest;
 import pl.telco.incident.dto.IncidentFilterRequest;
 import pl.telco.incident.dto.IncidentNodeRequest;
-import pl.telco.incident.dto.IncidentNodeResponse;
 import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.dto.IncidentSummaryResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
 import pl.telco.incident.dto.IncidentUpdateRequest;
+import pl.telco.incident.mapper.IncidentMapper;
 import pl.telco.incident.entity.Incident;
 import pl.telco.incident.entity.IncidentNode;
 import pl.telco.incident.entity.IncidentTimeline;
@@ -91,6 +91,7 @@ public class IncidentService {
     private final NetworkNodeRepository networkNodeRepository;
     private final IncidentTimelineRepository incidentTimelineRepository;
     private final MeterRegistry meterRegistry;
+    private final IncidentMapper incidentMapper;
 
     @Transactional
     public IncidentResponse createIncident(IncidentCreateRequest request) {
@@ -133,7 +134,7 @@ public class IncidentService {
         recordIncidentCreated(saved);
         logIncidentBusinessEvent("create", IncidentTimelineEventType.CREATED, saved, null, null, false);
 
-        return mapToDetailedResponse(saved);
+        return incidentMapper.toDetailedResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -168,12 +169,12 @@ public class IncidentService {
                 .and(withSort(filter.getSortBy(), sortDirection));
 
         return incidentRepository.findAll(specification, pageable)
-                .map(this::mapToSummaryResponse);
+                .map(incidentMapper::toSummaryResponse);
     }
 
     @Transactional(readOnly = true)
     public IncidentResponse getIncidentById(Long id) {
-        return mapToDetailedResponse(findDetailedIncidentByIdOrThrow(id));
+        return incidentMapper.toDetailedResponse(findDetailedIncidentByIdOrThrow(id));
     }
 
     @Transactional
@@ -231,7 +232,7 @@ public class IncidentService {
         recordIncidentUpdated(saved, changedFields);
         logIncidentBusinessEvent("update", IncidentTimelineEventType.UPDATED, saved, null, changedFields, false);
 
-        return mapToDetailedResponse(saved);
+        return incidentMapper.toDetailedResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -239,7 +240,7 @@ public class IncidentService {
         findIncidentByIdOrThrow(id);
 
         return incidentTimelineRepository.findByIncidentIdOrderByCreatedAtAsc(id).stream()
-                .map(this::mapTimelineToResponse)
+                .map(incidentMapper::toTimelineResponse)
                 .toList();
     }
 
@@ -258,7 +259,7 @@ public class IncidentService {
         recordLifecycleTransition("acknowledge", IncidentTimelineEventType.ACKNOWLEDGED, saved);
         logIncidentBusinessEvent("acknowledge", IncidentTimelineEventType.ACKNOWLEDGED, saved, IncidentStatus.OPEN, null, hasNote(request));
 
-        return mapToDetailedResponse(saved);
+        return incidentMapper.toDetailedResponse(saved);
     }
 
     @Transactional
@@ -276,7 +277,7 @@ public class IncidentService {
         recordLifecycleTransition("resolve", IncidentTimelineEventType.RESOLVED, saved);
         logIncidentBusinessEvent("resolve", IncidentTimelineEventType.RESOLVED, saved, IncidentStatus.ACKNOWLEDGED, null, hasNote(request));
 
-        return mapToDetailedResponse(saved);
+        return incidentMapper.toDetailedResponse(saved);
     }
 
     @Transactional
@@ -294,7 +295,7 @@ public class IncidentService {
         recordLifecycleTransition("close", IncidentTimelineEventType.CLOSED, saved);
         logIncidentBusinessEvent("close", IncidentTimelineEventType.CLOSED, saved, IncidentStatus.RESOLVED, null, hasNote(request));
 
-        return mapToDetailedResponse(saved);
+        return incidentMapper.toDetailedResponse(saved);
     }
 
     private void recordIncidentCreated(Incident incident) {
@@ -695,58 +696,4 @@ public class IncidentService {
         return "Incident updated: " + String.join(", ", changedFields);
     }
 
-    private IncidentSummaryResponse mapToSummaryResponse(Incident incident) {
-        IncidentSummaryResponse response = new IncidentSummaryResponse();
-        response.setId(incident.getId());
-        response.setIncidentNumber(incident.getIncidentNumber());
-        response.setTitle(incident.getTitle());
-        response.setStatus(incident.getStatus());
-        response.setPriority(incident.getPriority());
-        response.setRegion(incident.getRegion());
-        response.setOpenedAt(incident.getOpenedAt());
-        response.setAcknowledgedAt(incident.getAcknowledgedAt());
-        response.setResolvedAt(incident.getResolvedAt());
-        response.setClosedAt(incident.getClosedAt());
-        return response;
-    }
-
-    private IncidentResponse mapToDetailedResponse(Incident incident) {
-        IncidentResponse response = new IncidentResponse();
-        response.setId(incident.getId());
-        response.setIncidentNumber(incident.getIncidentNumber());
-        response.setTitle(incident.getTitle());
-        response.setStatus(incident.getStatus());
-        response.setPriority(incident.getPriority());
-        response.setRegion(incident.getRegion());
-        response.setSourceAlarmType(incident.getSourceAlarmType());
-        response.setPossiblyPlanned(incident.getPossiblyPlanned());
-        response.setRootNodeId(incident.getRootNode() != null ? incident.getRootNode().getId() : null);
-        response.setOpenedAt(incident.getOpenedAt());
-        response.setAcknowledgedAt(incident.getAcknowledgedAt());
-        response.setResolvedAt(incident.getResolvedAt());
-        response.setClosedAt(incident.getClosedAt());
-        response.setNodes(incident.getIncidentNodes().stream().map(this::mapIncidentNodeToResponse).toList());
-        return response;
-    }
-
-    private IncidentNodeResponse mapIncidentNodeToResponse(IncidentNode incidentNode) {
-        IncidentNodeResponse response = new IncidentNodeResponse();
-        response.setNetworkNodeId(incidentNode.getNetworkNode().getId());
-        response.setNodeName(incidentNode.getNetworkNode().getNodeName());
-        response.setRole(incidentNode.getRole());
-        response.setNodeType(incidentNode.getNetworkNode().getNodeType());
-        response.setRegion(incidentNode.getNetworkNode().getRegion());
-        response.setVendor(incidentNode.getNetworkNode().getVendor());
-        response.setActive(incidentNode.getNetworkNode().getActive());
-        return response;
-    }
-
-    private IncidentTimelineResponse mapTimelineToResponse(IncidentTimeline timeline) {
-        IncidentTimelineResponse response = new IncidentTimelineResponse();
-        response.setId(timeline.getId());
-        response.setEventType(timeline.getEventType());
-        response.setMessage(timeline.getMessage());
-        response.setCreatedAt(timeline.getCreatedAt());
-        return response;
-    }
 }

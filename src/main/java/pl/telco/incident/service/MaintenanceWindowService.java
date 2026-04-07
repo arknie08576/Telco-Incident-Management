@@ -12,6 +12,7 @@ import pl.telco.incident.dto.MaintenanceWindowCreateRequest;
 import pl.telco.incident.dto.MaintenanceWindowFilterRequest;
 import pl.telco.incident.dto.MaintenanceWindowResponse;
 import pl.telco.incident.dto.MaintenanceWindowUpdateRequest;
+import pl.telco.incident.mapper.MaintenanceWindowMapper;
 import pl.telco.incident.entity.MaintenanceNode;
 import pl.telco.incident.entity.MaintenanceWindow;
 import pl.telco.incident.entity.NetworkNode;
@@ -54,6 +55,7 @@ public class MaintenanceWindowService {
 
     private final MaintenanceWindowRepository maintenanceWindowRepository;
     private final NetworkNodeRepository networkNodeRepository;
+    private final MaintenanceWindowMapper maintenanceWindowMapper;
 
     @Transactional
     public MaintenanceWindowResponse createMaintenanceWindow(MaintenanceWindowCreateRequest request) {
@@ -74,7 +76,7 @@ public class MaintenanceWindowService {
             maintenanceWindow.addMaintenanceNode(maintenanceNode);
         }
 
-        return mapToResponse(maintenanceWindowRepository.save(maintenanceWindow));
+        return maintenanceWindowMapper.toResponse(maintenanceWindowRepository.save(maintenanceWindow));
     }
 
     @Transactional
@@ -145,12 +147,12 @@ public class MaintenanceWindowService {
             syncMaintenanceNodes(maintenanceWindow, requestedNodeIds);
         }
 
-        return mapToResponse(maintenanceWindowRepository.save(maintenanceWindow));
+        return maintenanceWindowMapper.toResponse(maintenanceWindowRepository.save(maintenanceWindow));
     }
 
     @Transactional(readOnly = true)
     public MaintenanceWindowResponse getMaintenanceWindowById(Long id) {
-        return mapToResponse(getMaintenanceWindowEntityOrThrow(id));
+        return maintenanceWindowMapper.toResponse(getMaintenanceWindowEntityOrThrow(id));
     }
 
     @Transactional(readOnly = true)
@@ -173,27 +175,13 @@ public class MaintenanceWindowService {
                 .and(endTimeTo(filter.getEndTo()));
 
         return maintenanceWindowRepository.findAll(specification, pageable)
-                .map(this::mapToResponse);
+                .map(maintenanceWindowMapper::toResponse);
     }
 
     @Transactional(readOnly = true)
     public MaintenanceWindow getMaintenanceWindowEntityOrThrow(Long id) {
         return maintenanceWindowRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Maintenance window not found: " + id));
-    }
-
-    private MaintenanceWindowResponse mapToResponse(MaintenanceWindow maintenanceWindow) {
-        MaintenanceWindowResponse response = new MaintenanceWindowResponse();
-        response.setId(maintenanceWindow.getId());
-        response.setTitle(maintenanceWindow.getTitle());
-        response.setDescription(maintenanceWindow.getDescription());
-        response.setStatus(maintenanceWindow.getStatus());
-        response.setStartTime(maintenanceWindow.getStartTime());
-        response.setEndTime(maintenanceWindow.getEndTime());
-        response.setNodeIds(maintenanceWindow.getMaintenanceNodes().stream()
-                .map(node -> node.getNetworkNode().getId())
-                .toList());
-        return response;
     }
 
     private void syncMaintenanceNodes(MaintenanceWindow maintenanceWindow, List<Long> requestedNodeIds) {
