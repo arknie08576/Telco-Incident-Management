@@ -30,6 +30,8 @@ import pl.telco.incident.entity.enums.Region;
 import pl.telco.incident.entity.enums.SourceAlarmType;
 import pl.telco.incident.exception.BadRequestException;
 import pl.telco.incident.exception.ConflictException;
+import pl.telco.incident.mapper.IncidentMapper;
+import pl.telco.incident.observability.ObservabilityEventLogger;
 import pl.telco.incident.repository.IncidentRepository;
 import pl.telco.incident.repository.IncidentTimelineRepository;
 import pl.telco.incident.repository.NetworkNodeRepository;
@@ -58,6 +60,12 @@ class IncidentServiceTest {
     @Mock
     private IncidentTimelineRepository incidentTimelineRepository;
 
+    @Mock
+    private IncidentMapper incidentMapper;
+
+    @Mock
+    private ObservabilityEventLogger observabilityEventLogger;
+
     private IncidentService incidentService;
     private SimpleMeterRegistry meterRegistry;
     private NetworkNode rootNode;
@@ -66,7 +74,7 @@ class IncidentServiceTest {
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
-        incidentService = new IncidentService(incidentRepository, networkNodeRepository, incidentTimelineRepository, meterRegistry);
+        incidentService = new IncidentService(incidentRepository, networkNodeRepository, incidentTimelineRepository, meterRegistry, incidentMapper, observabilityEventLogger);
 
         rootNode = buildNode(1L, "CORE-RTR-WAW-01", NodeType.ROUTER, Region.MAZOWIECKIE);
         affectedNode = buildNode(2L, "RAN-GNB-WAW-01", NodeType.G_NODE_B, Region.MAZOWIECKIE);
