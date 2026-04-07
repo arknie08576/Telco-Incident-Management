@@ -2,10 +2,12 @@ package pl.telco.incident.dto;
 
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Getter;
 import org.springframework.data.domain.Page;
 
 import java.util.List;
 
+@Getter
 @Schema(name = "AlarmEventPageResponse", description = "Stable paginated response for alarm event listing.")
 public class AlarmEventPageResponse {
 
@@ -58,33 +60,5 @@ public class AlarmEventPageResponse {
                 page.isFirst(),
                 page.isLast()
         );
-    }
-
-    public List<AlarmEventResponse> getContent() {
-        return content;
-    }
-
-    public int getNumber() {
-        return number;
-    }
-
-    public int getSize() {
-        return size;
-    }
-
-    public long getTotalElements() {
-        return totalElements;
-    }
-
-    public int getTotalPages() {
-        return totalPages;
-    }
-
-    public boolean isFirst() {
-        return first;
-    }
-
-    public boolean isLast() {
-        return last;
     }
 }

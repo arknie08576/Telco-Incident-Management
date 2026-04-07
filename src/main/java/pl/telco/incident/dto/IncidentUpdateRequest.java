@@ -1,17 +1,19 @@
 package pl.telco.incident.dto;
 
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import lombok.Data;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.Region;
 import pl.telco.incident.entity.enums.SourceAlarmType;
 
 import java.util.List;
 
+@Data
 @Schema(name = "IncidentUpdateRequest", description = "Partial payload used to update editable incident fields.")
 public class IncidentUpdateRequest {
 
@@ -45,68 +47,4 @@ public class IncidentUpdateRequest {
     @Valid
     @Size(min = 1, message = "nodes must not be empty")
     private List<IncidentNodeRequest> nodes;
-
-    public String getIncidentNumber() {
-        return incidentNumber;
-    }
-
-    public void setIncidentNumber(String incidentNumber) {
-        this.incidentNumber = incidentNumber;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public void setTitle(String title) {
-        this.title = title;
-    }
-
-    public IncidentPriority getPriority() {
-        return priority;
-    }
-
-    public void setPriority(IncidentPriority priority) {
-        this.priority = priority;
-    }
-
-    public Region getRegion() {
-        return region;
-    }
-
-    public void setRegion(Region region) {
-        this.region = region;
-    }
-
-    public SourceAlarmType getSourceAlarmType() {
-        return sourceAlarmType;
-    }
-
-    public void setSourceAlarmType(SourceAlarmType sourceAlarmType) {
-        this.sourceAlarmType = sourceAlarmType;
-    }
-
-    public Boolean getPossiblyPlanned() {
-        return possiblyPlanned;
-    }
-
-    public void setPossiblyPlanned(Boolean possiblyPlanned) {
-        this.possiblyPlanned = possiblyPlanned;
-    }
-
-    public Long getRootNodeId() {
-        return rootNodeId;
-    }
-
-    public void setRootNodeId(Long rootNodeId) {
-        this.rootNodeId = rootNodeId;
-    }
-
-    public List<IncidentNodeRequest> getNodes() {
-        return nodes;
-    }
-
-    public void setNodes(List<IncidentNodeRequest> nodes) {
-        this.nodes = nodes;
-    }
 }

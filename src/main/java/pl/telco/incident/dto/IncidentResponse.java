@@ -2,6 +2,7 @@ package pl.telco.incident.dto;
 
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Data;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.entity.enums.Region;
@@ -10,6 +11,7 @@ import pl.telco.incident.entity.enums.SourceAlarmType;
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Data
 @Schema(name = "IncidentResponse", description = "Detailed current state of an incident.")
 public class IncidentResponse {
 
@@ -54,116 +56,4 @@ public class IncidentResponse {
 
     @ArraySchema(schema = @Schema(implementation = IncidentNodeResponse.class))
     private List<IncidentNodeResponse> nodes;
-
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getIncidentNumber() {
-        return incidentNumber;
-    }
-
-    public void setIncidentNumber(String incidentNumber) {
-        this.incidentNumber = incidentNumber;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public void setTitle(String title) {
-        this.title = title;
-    }
-
-    public IncidentStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(IncidentStatus status) {
-        this.status = status;
-    }
-
-    public IncidentPriority getPriority() {
-        return priority;
-    }
-
-    public void setPriority(IncidentPriority priority) {
-        this.priority = priority;
-    }
-
-    public Region getRegion() {
-        return region;
-    }
-
-    public void setRegion(Region region) {
-        this.region = region;
-    }
-
-    public SourceAlarmType getSourceAlarmType() {
-        return sourceAlarmType;
-    }
-
-    public void setSourceAlarmType(SourceAlarmType sourceAlarmType) {
-        this.sourceAlarmType = sourceAlarmType;
-    }
-
-    public Boolean getPossiblyPlanned() {
-        return possiblyPlanned;
-    }
-
-    public void setPossiblyPlanned(Boolean possiblyPlanned) {
-        this.possiblyPlanned = possiblyPlanned;
-    }
-
-    public Long getRootNodeId() {
-        return rootNodeId;
-    }
-
-    public void setRootNodeId(Long rootNodeId) {
-        this.rootNodeId = rootNodeId;
-    }
-
-    public LocalDateTime getOpenedAt() {
-        return openedAt;
-    }
-
-    public void setOpenedAt(LocalDateTime openedAt) {
-        this.openedAt = openedAt;
-    }
-
-    public LocalDateTime getAcknowledgedAt() {
-        return acknowledgedAt;
-    }
-
-    public void setAcknowledgedAt(LocalDateTime acknowledgedAt) {
-        this.acknowledgedAt = acknowledgedAt;
-    }
-
-    public LocalDateTime getResolvedAt() {
-        return resolvedAt;
-    }
-
-    public void setResolvedAt(LocalDateTime resolvedAt) {
-        this.resolvedAt = resolvedAt;
-    }
-
-    public LocalDateTime getClosedAt() {
-        return closedAt;
-    }
-
-    public void setClosedAt(LocalDateTime closedAt) {
-        this.closedAt = closedAt;
-    }
-
-    public List<IncidentNodeResponse> getNodes() {
-        return nodes;
-    }
-
-    public void setNodes(List<IncidentNodeResponse> nodes) {
-        this.nodes = nodes;
-    }
 }

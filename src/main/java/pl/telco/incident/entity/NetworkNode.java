@@ -1,6 +1,7 @@
 package pl.telco.incident.entity;
 
 import jakarta.persistence.*;
+import lombok.*;
 import pl.telco.incident.entity.enums.NodeType;
 import pl.telco.incident.entity.enums.Region;
 import pl.telco.incident.observability.TelcoAuditEntityListener;
@@ -12,6 +13,11 @@ import java.util.List;
 @Entity
 @Table(name = "network_node")
 @EntityListeners(TelcoAuditEntityListener.class)
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class NetworkNode {
 
     @Id
@@ -38,23 +44,9 @@ public class NetworkNode {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Builder.Default
     @OneToMany(mappedBy = "rootNode")
     private List<Incident> rootIncidents = new ArrayList<>();
-
-    public NetworkNode() {
-    }
-
-    public NetworkNode(Long id, String nodeName, NodeType nodeType, Region region, String vendor, Boolean active,
-                       LocalDateTime createdAt, List<Incident> rootIncidents) {
-        this.id = id;
-        this.nodeName = nodeName;
-        this.nodeType = nodeType;
-        this.region = region;
-        this.vendor = vendor;
-        this.active = active;
-        this.createdAt = createdAt;
-        this.rootIncidents = rootIncidents != null ? rootIncidents : new ArrayList<>();
-    }
 
     @PrePersist
     public void prePersist() {
@@ -63,132 +55,6 @@ public class NetworkNode {
         }
         if (active == null) {
             active = true;
-        }
-    }
-
-    public static NetworkNodeBuilder builder() {
-        return new NetworkNodeBuilder();
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getNodeName() {
-        return nodeName;
-    }
-
-    public void setNodeName(String nodeName) {
-        this.nodeName = nodeName;
-    }
-
-    public NodeType getNodeType() {
-        return nodeType;
-    }
-
-    public void setNodeType(NodeType nodeType) {
-        this.nodeType = nodeType;
-    }
-
-    public Region getRegion() {
-        return region;
-    }
-
-    public void setRegion(Region region) {
-        this.region = region;
-    }
-
-    public String getVendor() {
-        return vendor;
-    }
-
-    public void setVendor(String vendor) {
-        this.vendor = vendor;
-    }
-
-    public Boolean getActive() {
-        return active;
-    }
-
-    public void setActive(Boolean active) {
-        this.active = active;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public List<Incident> getRootIncidents() {
-        return rootIncidents;
-    }
-
-    public void setRootIncidents(List<Incident> rootIncidents) {
-        this.rootIncidents = rootIncidents;
-    }
-
-    public static final class NetworkNodeBuilder {
-        private Long id;
-        private String nodeName;
-        private NodeType nodeType;
-        private Region region;
-        private String vendor;
-        private Boolean active;
-        private LocalDateTime createdAt;
-        private List<Incident> rootIncidents = new ArrayList<>();
-
-        private NetworkNodeBuilder() {
-        }
-
-        public NetworkNodeBuilder id(Long id) {
-            this.id = id;
-            return this;
-        }
-
-        public NetworkNodeBuilder nodeName(String nodeName) {
-            this.nodeName = nodeName;
-            return this;
-        }
-
-        public NetworkNodeBuilder nodeType(NodeType nodeType) {
-            this.nodeType = nodeType;
-            return this;
-        }
-
-        public NetworkNodeBuilder region(Region region) {
-            this.region = region;
-            return this;
-        }
-
-        public NetworkNodeBuilder vendor(String vendor) {
-            this.vendor = vendor;
-            return this;
-        }
-
-        public NetworkNodeBuilder active(Boolean active) {
-            this.active = active;
-            return this;
-        }
-
-        public NetworkNodeBuilder createdAt(LocalDateTime createdAt) {
-            this.createdAt = createdAt;
-            return this;
-        }
-
-        public NetworkNodeBuilder rootIncidents(List<Incident> rootIncidents) {
-            this.rootIncidents = rootIncidents != null ? rootIncidents : new ArrayList<>();
-            return this;
-        }
-
-        public NetworkNode build() {
-            return new NetworkNode(id, nodeName, nodeType, region, vendor, active, createdAt, rootIncidents);
         }
     }
 }

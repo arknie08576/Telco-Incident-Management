@@ -8,12 +8,14 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import lombok.Data;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.Region;
 import pl.telco.incident.entity.enums.SourceAlarmType;
 
 import java.util.List;
 
+@Data
 @Schema(name = "IncidentCreateRequest", description = "Payload used to create a new incident.")
 public class IncidentCreateRequest {
 
@@ -54,68 +56,4 @@ public class IncidentCreateRequest {
     @NotEmpty(message = "nodes must not be empty")
     @Valid
     private List<IncidentNodeRequest> nodes;
-
-    public String getIncidentNumber() {
-        return incidentNumber;
-    }
-
-    public void setIncidentNumber(String incidentNumber) {
-        this.incidentNumber = incidentNumber;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public void setTitle(String title) {
-        this.title = title;
-    }
-
-    public IncidentPriority getPriority() {
-        return priority;
-    }
-
-    public void setPriority(IncidentPriority priority) {
-        this.priority = priority;
-    }
-
-    public Region getRegion() {
-        return region;
-    }
-
-    public void setRegion(Region region) {
-        this.region = region;
-    }
-
-    public SourceAlarmType getSourceAlarmType() {
-        return sourceAlarmType;
-    }
-
-    public void setSourceAlarmType(SourceAlarmType sourceAlarmType) {
-        this.sourceAlarmType = sourceAlarmType;
-    }
-
-    public Boolean getPossiblyPlanned() {
-        return possiblyPlanned;
-    }
-
-    public void setPossiblyPlanned(Boolean possiblyPlanned) {
-        this.possiblyPlanned = possiblyPlanned;
-    }
-
-    public Long getRootNodeId() {
-        return rootNodeId;
-    }
-
-    public void setRootNodeId(Long rootNodeId) {
-        this.rootNodeId = rootNodeId;
-    }
-
-    public List<IncidentNodeRequest> getNodes() {
-        return nodes;
-    }
-
-    public void setNodes(List<IncidentNodeRequest> nodes) {
-        this.nodes = nodes;
-    }
 }

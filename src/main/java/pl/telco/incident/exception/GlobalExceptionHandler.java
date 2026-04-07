@@ -106,7 +106,8 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 "Malformed JSON request or invalid enum value",
-                request.getRequestURI()
+                request.getRequestURI(),
+                null
         );
 
         log.warn(
@@ -134,7 +135,8 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 message,
-                request.getRequestURI()
+                request.getRequestURI(),
+                null
         );
 
         log.warn(
@@ -162,7 +164,8 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 ex.getMessage(),
-                request.getRequestURI()
+                request.getRequestURI(),
+                null
         );
 
         log.warn(
@@ -189,7 +192,8 @@ public class GlobalExceptionHandler {
                 HttpStatus.NOT_FOUND.value(),
                 HttpStatus.NOT_FOUND.getReasonPhrase(),
                 ex.getMessage(),
-                request.getRequestURI()
+                request.getRequestURI(),
+                null
         );
 
         log.warn(
@@ -216,7 +220,8 @@ public class GlobalExceptionHandler {
                 HttpStatus.CONFLICT.value(),
                 HttpStatus.CONFLICT.getReasonPhrase(),
                 ex.getMessage(),
-                request.getRequestURI()
+                request.getRequestURI(),
+                null
         );
 
         log.warn(
@@ -243,7 +248,8 @@ public class GlobalExceptionHandler {
                 HttpStatus.CONFLICT.value(),
                 HttpStatus.CONFLICT.getReasonPhrase(),
                 "Database constraint violation",
-                request.getRequestURI()
+                request.getRequestURI(),
+                null
         );
 
         log.warn(
@@ -269,7 +275,8 @@ public class GlobalExceptionHandler {
                 HttpStatus.CONFLICT.value(),
                 HttpStatus.CONFLICT.getReasonPhrase(),
                 "Resource was modified concurrently. Please retry.",
-                request.getRequestURI()
+                request.getRequestURI(),
+                null
         );
 
         log.warn(
@@ -295,7 +302,8 @@ public class GlobalExceptionHandler {
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(),
                 "Unexpected server error",
-                request.getRequestURI()
+                request.getRequestURI(),
+                null
         );
 
         log.error(

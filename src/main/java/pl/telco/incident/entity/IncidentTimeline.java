@@ -1,6 +1,9 @@
 package pl.telco.incident.entity;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import pl.telco.incident.entity.enums.IncidentTimelineEventType;
 import pl.telco.incident.observability.TelcoAuditEntityListener;
 
@@ -9,6 +12,9 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "incident_timeline")
 @EntityListeners(TelcoAuditEntityListener.class)
+@Getter
+@Setter
+@NoArgsConstructor
 public class IncidentTimeline {
 
     @Id
@@ -34,41 +40,5 @@ public class IncidentTimeline {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
         }
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Incident getIncident() {
-        return incident;
-    }
-
-    public void setIncident(Incident incident) {
-        this.incident = incident;
-    }
-
-    public IncidentTimelineEventType getEventType() {
-        return eventType;
-    }
-
-    public void setEventType(IncidentTimelineEventType eventType) {
-        this.eventType = eventType;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
     }
 }

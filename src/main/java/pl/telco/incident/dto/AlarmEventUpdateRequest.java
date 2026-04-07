@@ -3,11 +3,13 @@ package pl.telco.incident.dto;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import lombok.Data;
 import pl.telco.incident.entity.enums.AlarmSeverity;
 import pl.telco.incident.entity.enums.AlarmStatus;
 
 import java.time.LocalDateTime;
 
+@Data
 public class AlarmEventUpdateRequest {
 
     private AlarmSeverity severity;
@@ -26,60 +28,4 @@ public class AlarmEventUpdateRequest {
     private Boolean suppressedByMaintenance;
 
     private LocalDateTime occurredAt;
-
-    public AlarmSeverity getSeverity() {
-        return severity;
-    }
-
-    public void setSeverity(AlarmSeverity severity) {
-        this.severity = severity;
-    }
-
-    public AlarmStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(AlarmStatus status) {
-        this.status = status;
-    }
-
-    public Long getIncidentId() {
-        return incidentId;
-    }
-
-    public void setIncidentId(Long incidentId) {
-        this.incidentId = incidentId;
-    }
-
-    public String getAlarmType() {
-        return alarmType;
-    }
-
-    public void setAlarmType(String alarmType) {
-        this.alarmType = alarmType;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public Boolean getSuppressedByMaintenance() {
-        return suppressedByMaintenance;
-    }
-
-    public void setSuppressedByMaintenance(Boolean suppressedByMaintenance) {
-        this.suppressedByMaintenance = suppressedByMaintenance;
-    }
-
-    public LocalDateTime getOccurredAt() {
-        return occurredAt;
-    }
-
-    public void setOccurredAt(LocalDateTime occurredAt) {
-        this.occurredAt = occurredAt;
-    }
 }
