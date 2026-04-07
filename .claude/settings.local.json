@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"public.*\\(\" /c/Users/arkni/IdeaProjects/Telco-Incident-Management/src/main/java/pl/telco/incident/service/*.java)"
+    ]
+  }
+}

@@ -11,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import pl.telco.incident.dto.IncidentActionRequest;
 import pl.telco.incident.dto.IncidentCreateRequest;
+import pl.telco.incident.dto.IncidentFilterRequest;
 import pl.telco.incident.dto.IncidentNodeRequest;
 import pl.telco.incident.dto.IncidentResponse;
 import pl.telco.incident.dto.IncidentSummaryResponse;
@@ -345,85 +346,33 @@ class IncidentServiceTest {
 
     @Test
     void getAllIncidentsShouldRejectUnsupportedSortByField() {
-        assertThatThrownBy(() -> incidentService.getAllIncidents(
-                0,
-                10,
-                "createdAt",
-                "asc",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        )).isInstanceOf(BadRequestException.class)
+        IncidentFilterRequest filter = new IncidentFilterRequest();
+        filter.setSortBy("createdAt");
+
+        assertThatThrownBy(() -> incidentService.getAllIncidents(filter))
+                .isInstanceOf(BadRequestException.class)
                 .hasMessage("Unsupported sortBy value: createdAt");
     }
 
     @Test
     void getAllIncidentsShouldRejectOpenedAtRangeWhenFromIsAfterTo() {
-        assertThatThrownBy(() -> incidentService.getAllIncidents(
-                0,
-                10,
-                "openedAt",
-                "desc",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                LocalDateTime.of(2026, 3, 30, 10, 0),
-                LocalDateTime.of(2026, 3, 29, 10, 0),
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        )).isInstanceOf(BadRequestException.class)
+        IncidentFilterRequest filter = new IncidentFilterRequest();
+        filter.setOpenedFrom(LocalDateTime.of(2026, 3, 30, 10, 0));
+        filter.setOpenedTo(LocalDateTime.of(2026, 3, 29, 10, 0));
+
+        assertThatThrownBy(() -> incidentService.getAllIncidents(filter))
+                .isInstanceOf(BadRequestException.class)
                 .hasMessage("openedFrom must be earlier than or equal to openedTo");
     }
 
     @Test
     void getAllIncidentsShouldRejectAcknowledgedAtRangeWhenFromIsAfterTo() {
-        assertThatThrownBy(() -> incidentService.getAllIncidents(
-                0,
-                10,
-                "openedAt",
-                "desc",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                LocalDateTime.of(2026, 3, 30, 10, 0),
-                LocalDateTime.of(2026, 3, 29, 10, 0),
-                null,
-                null,
-                null,
-                null
-        )).isInstanceOf(BadRequestException.class)
+        IncidentFilterRequest filter = new IncidentFilterRequest();
+        filter.setAcknowledgedFrom(LocalDateTime.of(2026, 3, 30, 10, 0));
+        filter.setAcknowledgedTo(LocalDateTime.of(2026, 3, 29, 10, 0));
+
+        assertThatThrownBy(() -> incidentService.getAllIncidents(filter))
+                .isInstanceOf(BadRequestException.class)
                 .hasMessage("acknowledgedFrom must be earlier than or equal to acknowledgedTo");
     }
 
@@ -438,29 +387,21 @@ class IncidentServiceTest {
                 any(org.springframework.data.domain.Pageable.class)
         )).thenReturn(new PageImpl<>(List.of(incident)));
 
-        Page<IncidentSummaryResponse> result = incidentService.getAllIncidents(
-                0,
-                10,
-                "incidentNumber",
-                "asc",
-                IncidentPriority.CRITICAL,
-                List.of("HIGH", "CRITICAL"),
-                Region.POMORSKIE,
-                false,
-                IncidentStatus.OPEN,
-                List.of("OPEN", "RESOLVED"),
-                "INC-203",
-                "test",
-                null,
-                LocalDateTime.of(2026, 3, 29, 0, 0),
-                LocalDateTime.of(2026, 3, 29, 23, 59),
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        );
+        IncidentFilterRequest filter = new IncidentFilterRequest();
+        filter.setSortBy("incidentNumber");
+        filter.setDirection("asc");
+        filter.setPriority(IncidentPriority.CRITICAL);
+        filter.setPriorities(List.of("HIGH", "CRITICAL"));
+        filter.setRegion(Region.POMORSKIE);
+        filter.setPossiblyPlanned(false);
+        filter.setStatus(IncidentStatus.OPEN);
+        filter.setStatuses(List.of("OPEN", "RESOLVED"));
+        filter.setIncidentNumber("INC-203");
+        filter.setTitle("test");
+        filter.setOpenedFrom(LocalDateTime.of(2026, 3, 29, 0, 0));
+        filter.setOpenedTo(LocalDateTime.of(2026, 3, 29, 23, 59));
+
+        Page<IncidentSummaryResponse> result = incidentService.getAllIncidents(filter);
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().getFirst().getIncidentNumber()).isEqualTo("INC-203");
@@ -469,29 +410,11 @@ class IncidentServiceTest {
 
     @Test
     void getAllIncidentsShouldRejectInvalidMultiValuePriorityFilter() {
-        assertThatThrownBy(() -> incidentService.getAllIncidents(
-                0,
-                10,
-                "openedAt",
-                "desc",
-                null,
-                List.of("URGENT"),
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        )).isInstanceOf(BadRequestException.class)
+        IncidentFilterRequest filter = new IncidentFilterRequest();
+        filter.setPriorities(List.of("URGENT"));
+
+        assertThatThrownBy(() -> incidentService.getAllIncidents(filter))
+                .isInstanceOf(BadRequestException.class)
                 .hasMessage("Invalid value 'URGENT' for parameter 'priorities'");
     }
 

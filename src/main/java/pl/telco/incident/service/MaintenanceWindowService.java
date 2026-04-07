@@ -9,6 +9,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.MaintenanceWindowCreateRequest;
+import pl.telco.incident.dto.MaintenanceWindowFilterRequest;
 import pl.telco.incident.dto.MaintenanceWindowResponse;
 import pl.telco.incident.dto.MaintenanceWindowUpdateRequest;
 import pl.telco.incident.entity.MaintenanceNode;
@@ -153,36 +154,23 @@ public class MaintenanceWindowService {
     }
 
     @Transactional(readOnly = true)
-    public Page<MaintenanceWindowResponse> getMaintenanceWindows(
-            int page,
-            int size,
-            String sortBy,
-            String direction,
-            MaintenanceStatus status,
-            List<String> statuses,
-            String title,
-            Long nodeId,
-            LocalDateTime startFrom,
-            LocalDateTime startTo,
-            LocalDateTime endFrom,
-            LocalDateTime endTo
-    ) {
-        validateSortBy(sortBy);
-        validateDateRange("startFrom", startFrom, "startTo", startTo);
-        validateDateRange("endFrom", endFrom, "endTo", endTo);
+    public Page<MaintenanceWindowResponse> getMaintenanceWindows(MaintenanceWindowFilterRequest filter) {
+        validateSortBy(filter.getSortBy());
+        validateDateRange("startFrom", filter.getStartFrom(), "startTo", filter.getStartTo());
+        validateDateRange("endFrom", filter.getEndFrom(), "endTo", filter.getEndTo());
 
-        Set<MaintenanceStatus> statusFilters = mergeStatusFilters(status, statuses);
-        Sort.Direction sortDirection = parseSortDirection(direction);
-        Pageable pageable = PageRequest.of(page, size, buildSort(sortBy, sortDirection));
+        Set<MaintenanceStatus> statusFilters = mergeStatusFilters(filter.getStatus(), filter.getStatuses());
+        Sort.Direction sortDirection = parseSortDirection(filter.getDirection());
+        Pageable pageable = PageRequest.of(filter.getPage(), filter.getSize(), buildSort(filter.getSortBy(), sortDirection));
 
         Specification<MaintenanceWindow> specification = Specification
                 .where(hasStatuses(statusFilters))
-                .and(titleContains(title))
-                .and(hasNodeId(nodeId))
-                .and(startTimeFrom(startFrom))
-                .and(startTimeTo(startTo))
-                .and(endTimeFrom(endFrom))
-                .and(endTimeTo(endTo));
+                .and(titleContains(filter.getTitle()))
+                .and(hasNodeId(filter.getNodeId()))
+                .and(startTimeFrom(filter.getStartFrom()))
+                .and(startTimeTo(filter.getStartTo()))
+                .and(endTimeFrom(filter.getEndFrom()))
+                .and(endTimeTo(filter.getEndTo()));
 
         return maintenanceWindowRepository.findAll(specification, pageable)
                 .map(this::mapToResponse);

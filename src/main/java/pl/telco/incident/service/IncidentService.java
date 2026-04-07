@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.IncidentActionRequest;
 import pl.telco.incident.dto.IncidentCreateRequest;
+import pl.telco.incident.dto.IncidentFilterRequest;
 import pl.telco.incident.dto.IncidentNodeRequest;
 import pl.telco.incident.dto.IncidentNodeResponse;
 import pl.telco.incident.dto.IncidentResponse;
@@ -28,8 +29,6 @@ import pl.telco.incident.entity.enums.IncidentNodeRole;
 import pl.telco.incident.entity.enums.IncidentPriority;
 import pl.telco.incident.entity.enums.IncidentStatus;
 import pl.telco.incident.entity.enums.IncidentTimelineEventType;
-import pl.telco.incident.entity.enums.Region;
-import pl.telco.incident.entity.enums.SourceAlarmType;
 import pl.telco.incident.exception.BadRequestException;
 import pl.telco.incident.exception.ConflictException;
 import pl.telco.incident.exception.ResourceNotFoundException;
@@ -138,57 +137,35 @@ public class IncidentService {
     }
 
     @Transactional(readOnly = true)
-    public Page<IncidentSummaryResponse> getAllIncidents(
-            int page,
-            int size,
-            String sortBy,
-            String direction,
-            IncidentPriority priority,
-            List<String> priorities,
-            Region region,
-            Boolean possiblyPlanned,
-            IncidentStatus status,
-            List<String> statuses,
-            String incidentNumber,
-            String title,
-            SourceAlarmType sourceAlarmType,
-            LocalDateTime openedFrom,
-            LocalDateTime openedTo,
-            LocalDateTime acknowledgedFrom,
-            LocalDateTime acknowledgedTo,
-            LocalDateTime resolvedFrom,
-            LocalDateTime resolvedTo,
-            LocalDateTime closedFrom,
-            LocalDateTime closedTo
-    ) {
-        validateSortBy(sortBy);
-        validateDateRange("openedFrom", openedFrom, "openedTo", openedTo);
-        validateDateRange("acknowledgedFrom", acknowledgedFrom, "acknowledgedTo", acknowledgedTo);
-        validateDateRange("resolvedFrom", resolvedFrom, "resolvedTo", resolvedTo);
-        validateDateRange("closedFrom", closedFrom, "closedTo", closedTo);
+    public Page<IncidentSummaryResponse> getAllIncidents(IncidentFilterRequest filter) {
+        validateSortBy(filter.getSortBy());
+        validateDateRange("openedFrom", filter.getOpenedFrom(), "openedTo", filter.getOpenedTo());
+        validateDateRange("acknowledgedFrom", filter.getAcknowledgedFrom(), "acknowledgedTo", filter.getAcknowledgedTo());
+        validateDateRange("resolvedFrom", filter.getResolvedFrom(), "resolvedTo", filter.getResolvedTo());
+        validateDateRange("closedFrom", filter.getClosedFrom(), "closedTo", filter.getClosedTo());
 
-        Set<IncidentPriority> priorityFilters = mergePriorityFilters(priority, priorities);
-        Set<IncidentStatus> statusFilters = mergeStatusFilters(status, statuses);
-        Sort.Direction sortDirection = parseSortDirection(direction);
-        Pageable pageable = PageRequest.of(page, size);
+        Set<IncidentPriority> priorityFilters = mergePriorityFilters(filter.getPriority(), filter.getPriorities());
+        Set<IncidentStatus> statusFilters = mergeStatusFilters(filter.getStatus(), filter.getStatuses());
+        Sort.Direction sortDirection = parseSortDirection(filter.getDirection());
+        Pageable pageable = PageRequest.of(filter.getPage(), filter.getSize());
 
         Specification<Incident> specification = Specification
                 .where(hasPriorities(priorityFilters))
-                .and(hasRegion(region))
-                .and(hasPossiblyPlanned(possiblyPlanned))
+                .and(hasRegion(filter.getRegion()))
+                .and(hasPossiblyPlanned(filter.getPossiblyPlanned()))
                 .and(hasStatuses(statusFilters))
-                .and(incidentNumberContains(incidentNumber))
-                .and(titleContains(title))
-                .and(hasSourceAlarmType(sourceAlarmType))
-                .and(openedAtFrom(openedFrom))
-                .and(openedAtTo(openedTo))
-                .and(acknowledgedAtFrom(acknowledgedFrom))
-                .and(acknowledgedAtTo(acknowledgedTo))
-                .and(resolvedAtFrom(resolvedFrom))
-                .and(resolvedAtTo(resolvedTo))
-                .and(closedAtFrom(closedFrom))
-                .and(closedAtTo(closedTo))
-                .and(withSort(sortBy, sortDirection));
+                .and(incidentNumberContains(filter.getIncidentNumber()))
+                .and(titleContains(filter.getTitle()))
+                .and(hasSourceAlarmType(filter.getSourceAlarmType()))
+                .and(openedAtFrom(filter.getOpenedFrom()))
+                .and(openedAtTo(filter.getOpenedTo()))
+                .and(acknowledgedAtFrom(filter.getAcknowledgedFrom()))
+                .and(acknowledgedAtTo(filter.getAcknowledgedTo()))
+                .and(resolvedAtFrom(filter.getResolvedFrom()))
+                .and(resolvedAtTo(filter.getResolvedTo()))
+                .and(closedAtFrom(filter.getClosedFrom()))
+                .and(closedAtTo(filter.getClosedTo()))
+                .and(withSort(filter.getSortBy(), sortDirection));
 
         return incidentRepository.findAll(specification, pageable)
                 .map(this::mapToSummaryResponse);

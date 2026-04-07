@@ -9,6 +9,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.telco.incident.dto.AlarmEventCreateRequest;
+import pl.telco.incident.dto.AlarmEventFilterRequest;
 import pl.telco.incident.dto.AlarmEventResponse;
 import pl.telco.incident.dto.AlarmEventUpdateRequest;
 import pl.telco.incident.entity.AlarmEvent;
@@ -147,48 +148,29 @@ public class AlarmEventService {
     }
 
     @Transactional(readOnly = true)
-    public Page<AlarmEventResponse> getAlarmEvents(
-            int page,
-            int size,
-            String sortBy,
-            String direction,
-            AlarmSeverity severity,
-            List<String> severities,
-            AlarmStatus status,
-            List<String> statuses,
-            String sourceSystem,
-            String externalId,
-            String alarmType,
-            Long networkNodeId,
-            Long incidentId,
-            Boolean suppressedByMaintenance,
-            LocalDateTime occurredFrom,
-            LocalDateTime occurredTo,
-            LocalDateTime receivedFrom,
-            LocalDateTime receivedTo
-    ) {
-        validateSortBy(sortBy);
-        validateDateRange("occurredFrom", occurredFrom, "occurredTo", occurredTo);
-        validateDateRange("receivedFrom", receivedFrom, "receivedTo", receivedTo);
+    public Page<AlarmEventResponse> getAlarmEvents(AlarmEventFilterRequest filter) {
+        validateSortBy(filter.getSortBy());
+        validateDateRange("occurredFrom", filter.getOccurredFrom(), "occurredTo", filter.getOccurredTo());
+        validateDateRange("receivedFrom", filter.getReceivedFrom(), "receivedTo", filter.getReceivedTo());
 
-        Set<AlarmSeverity> severityFilters = mergeSeverityFilters(severity, severities);
-        Set<AlarmStatus> statusFilters = mergeStatusFilters(status, statuses);
-        Sort.Direction sortDirection = parseSortDirection(direction);
-        Pageable pageable = PageRequest.of(page, size, buildSort(sortBy, sortDirection));
+        Set<AlarmSeverity> severityFilters = mergeSeverityFilters(filter.getSeverity(), filter.getSeverities());
+        Set<AlarmStatus> statusFilters = mergeStatusFilters(filter.getStatus(), filter.getStatuses());
+        Sort.Direction sortDirection = parseSortDirection(filter.getDirection());
+        Pageable pageable = PageRequest.of(filter.getPage(), filter.getSize(), buildSort(filter.getSortBy(), sortDirection));
 
         Specification<AlarmEvent> specification = Specification
                 .where(hasSeverities(severityFilters))
                 .and(hasStatuses(statusFilters))
-                .and(sourceSystemContains(sourceSystem))
-                .and(externalIdContains(externalId))
-                .and(alarmTypeContains(alarmType))
-                .and(hasNetworkNodeId(networkNodeId))
-                .and(hasIncidentId(incidentId))
-                .and(hasSuppressedByMaintenance(suppressedByMaintenance))
-                .and(occurredAtFrom(occurredFrom))
-                .and(occurredAtTo(occurredTo))
-                .and(receivedAtFrom(receivedFrom))
-                .and(receivedAtTo(receivedTo));
+                .and(sourceSystemContains(filter.getSourceSystem()))
+                .and(externalIdContains(filter.getExternalId()))
+                .and(alarmTypeContains(filter.getAlarmType()))
+                .and(hasNetworkNodeId(filter.getNetworkNodeId()))
+                .and(hasIncidentId(filter.getIncidentId()))
+                .and(hasSuppressedByMaintenance(filter.getSuppressedByMaintenance()))
+                .and(occurredAtFrom(filter.getOccurredFrom()))
+                .and(occurredAtTo(filter.getOccurredTo()))
+                .and(receivedAtFrom(filter.getReceivedFrom()))
+                .and(receivedAtTo(filter.getReceivedTo()));
 
         return alarmEventRepository.findAll(specification, pageable)
                 .map(this::mapToResponse);

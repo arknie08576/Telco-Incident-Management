@@ -9,28 +9,20 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import pl.telco.incident.dto.IncidentActionRequest;
 import pl.telco.incident.dto.IncidentCreateRequest;
+import pl.telco.incident.dto.IncidentFilterRequest;
 import pl.telco.incident.dto.IncidentPageResponse;
 import pl.telco.incident.dto.IncidentResponse;
-import pl.telco.incident.dto.IncidentSummaryResponse;
 import pl.telco.incident.dto.IncidentTimelineResponse;
 import pl.telco.incident.dto.IncidentUpdateRequest;
-import pl.telco.incident.entity.enums.IncidentPriority;
-import pl.telco.incident.entity.enums.IncidentStatus;
-import pl.telco.incident.entity.enums.Region;
-import pl.telco.incident.entity.enums.SourceAlarmType;
 import pl.telco.incident.service.IncidentService;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Validated
@@ -135,83 +127,8 @@ public class IncidentController {
                     content = @Content(schema = @Schema(implementation = pl.telco.incident.exception.ApiErrorResponse.class))
             )
     })
-    public IncidentPageResponse getAllIncidents(
-            @Parameter(description = "Zero-based page index", example = "0")
-            @RequestParam(name = "page", defaultValue = "0") @Min(0) int page,
-            @Parameter(description = "Page size, from 1 to 100", example = "10")
-            @RequestParam(name = "size", defaultValue = "10") @Min(1) @Max(100) int size,
-            @Parameter(description = "Supported values: openedAt, acknowledgedAt, resolvedAt, closedAt, incidentNumber, priority, title", example = "openedAt")
-            @RequestParam(name = "sortBy", defaultValue = "openedAt") String sortBy,
-            @Parameter(description = "Sort direction", example = "desc")
-            @RequestParam(name = "direction", defaultValue = "desc") String direction,
-            @Parameter(description = "Filter by a single priority", example = "HIGH")
-            @RequestParam(name = "priority", required = false) IncidentPriority priority,
-            @Parameter(description = "Filter by multiple priorities. Supports repeated params or comma-separated values.", example = "HIGH,CRITICAL")
-            @RequestParam(name = "priorities", required = false) List<String> priorities,
-            @Parameter(description = "Region filter", example = "MAZOWIECKIE")
-            @RequestParam(name = "region", required = false) Region region,
-            @Parameter(description = "Filter incidents that may be planned work", example = "false")
-            @RequestParam(name = "possiblyPlanned", required = false) Boolean possiblyPlanned,
-            @Parameter(description = "Filter by a single lifecycle status", example = "OPEN")
-            @RequestParam(name = "status", required = false) IncidentStatus status,
-            @Parameter(description = "Filter by multiple lifecycle statuses. Supports repeated params or comma-separated values.", example = "OPEN,ACKNOWLEDGED")
-            @RequestParam(name = "statuses", required = false) List<String> statuses,
-            @Parameter(description = "Case-insensitive partial match on incident number", example = "INC-10")
-            @RequestParam(name = "incidentNumber", required = false) String incidentNumber,
-            @Parameter(description = "Case-insensitive partial match on title", example = "router failure")
-            @RequestParam(name = "title", required = false) String title,
-            @Parameter(description = "Source alarm type filter", example = "HARDWARE")
-            @RequestParam(name = "sourceAlarmType", required = false) SourceAlarmType sourceAlarmType,
-            @Parameter(description = "Include incidents opened at or after this timestamp.", example = "2026-03-29T07:00:00")
-            @RequestParam(name = "openedFrom", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime openedFrom,
-            @Parameter(description = "Include incidents opened at or before this timestamp.", example = "2026-03-29T12:00:00")
-            @RequestParam(name = "openedTo", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime openedTo,
-            @Parameter(description = "Include incidents acknowledged at or after this timestamp.", example = "2026-03-29T08:00:00")
-            @RequestParam(name = "acknowledgedFrom", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime acknowledgedFrom,
-            @Parameter(description = "Include incidents acknowledged at or before this timestamp.", example = "2026-03-29T09:00:00")
-            @RequestParam(name = "acknowledgedTo", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime acknowledgedTo,
-            @Parameter(description = "Include incidents resolved at or after this timestamp.", example = "2026-03-29T09:00:00")
-            @RequestParam(name = "resolvedFrom", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime resolvedFrom,
-            @Parameter(description = "Include incidents resolved at or before this timestamp.", example = "2026-03-29T10:00:00")
-            @RequestParam(name = "resolvedTo", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime resolvedTo,
-            @Parameter(description = "Include incidents closed at or after this timestamp.", example = "2026-03-29T10:00:00")
-            @RequestParam(name = "closedFrom", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime closedFrom,
-            @Parameter(description = "Include incidents closed at or before this timestamp.", example = "2026-03-29T11:00:00")
-            @RequestParam(name = "closedTo", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime closedTo
-    ) {
-        Page<IncidentSummaryResponse> incidentPage = incidentService.getAllIncidents(
-                page,
-                size,
-                sortBy,
-                direction,
-                priority,
-                priorities,
-                region,
-                possiblyPlanned,
-                status,
-                statuses,
-                incidentNumber,
-                title,
-                sourceAlarmType,
-                openedFrom,
-                openedTo,
-                acknowledgedFrom,
-                acknowledgedTo,
-                resolvedFrom,
-                resolvedTo,
-                closedFrom,
-                closedTo
-        );
-
-        return IncidentPageResponse.from(incidentPage);
+    public IncidentPageResponse getAllIncidents(@ParameterObject @ModelAttribute @Valid IncidentFilterRequest filter) {
+        return IncidentPageResponse.from(incidentService.getAllIncidents(filter));
     }
 
     @PatchMapping("/{id}/acknowledge")
